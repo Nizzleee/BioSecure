@@ -34,17 +34,6 @@ interface ApiService {
     @DELETE("users/{id}")
     suspend fun deleteUser(@Path("id") id: Int): DeleteResponse
 
-    @GET("employees/")
-    suspend fun getDjangoEmployees(): List<DjangoEmployee>
-
-    @POST("employees/")
-    suspend fun createDjangoEmployee(@Body employee: DjangoEmployee): DjangoEmployee
-
-    @PUT("employees/{id}/")
-    suspend fun updateDjangoEmployee(@Path("id") id: Int, @Body employee: DjangoEmployee): DjangoEmployee
-
-    @DELETE("employees/{id}/")
-    suspend fun deleteDjangoEmployee(@Path("id") id: Int)
 }
 
 data class UsersResponse(
@@ -84,10 +73,3 @@ data class EmployeeResponse(
     val email: String? = null
 )
 
-data class DjangoEmployee(
-    val id: Int = 0,
-    val first_name: String = "",
-    val last_name: String = "",
-    val email: String = "",
-    val department: String = ""
-)
