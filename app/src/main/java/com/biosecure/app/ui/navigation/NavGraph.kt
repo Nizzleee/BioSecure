@@ -30,7 +30,9 @@ sealed class Screen(val route: String) {
     object Confirmation : Screen("confirmation")
 
     // Admin routes
-    object Dashboard : Screen("admin/dashboard")
+    object Dashboard : Screen("admin/dashboard/{sedeId}") {
+        fun route(sedeId: String?) = "admin/dashboard/${sedeId ?: "null"}"
+    }
     object AdminScan : Screen("admin/scan")
     object AdminHistory : Screen("admin/history")
     object AdminSettings : Screen("admin/settings")
@@ -89,8 +91,19 @@ fun NavGraph(
         }
 
         // Admin routes
-        composable(Screen.Dashboard.route) {
-            DashboardScreen(navController = navController, viewModel = null, sedeId = null)
+        composable(
+            route = Screen.Dashboard.route,
+            arguments = listOf(
+                navArgument("sedeId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            val rawSedeId = backStackEntry.arguments?.getString("sedeId")
+            val sedeId = if (rawSedeId == "null") null else rawSedeId
+            DashboardScreen(navController = navController, viewModel = null, sedeId = sedeId)
         }
         composable(Screen.AdminScan.route) {
             ScanScreen(navController = navController, isAdmin = true, viewModel = null)
