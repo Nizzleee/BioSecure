@@ -1,6 +1,13 @@
 package com.biosecure.app.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -23,6 +30,7 @@ import com.biosecure.app.ui.screens.login.LoginScreen
 import com.biosecure.app.ui.screens.scan.ScanScreen
 import com.biosecure.app.ui.screens.settings.SettingsScreen
 import com.biosecure.app.ui.screens.splash.SplashScreen
+import com.biosecure.app.ui.viewmodel.BioSecureViewModel
 
 sealed class Screen(val route: String) {
     object Splash : Screen("splash")
@@ -61,6 +69,31 @@ sealed class Screen(val route: String) {
 }
 
 @Composable
+fun AdminRouteGuard(
+    viewModel: BioSecureViewModel?,
+    navController: NavController,
+    content: @Composable () -> Unit
+) {
+    if (viewModel == null) {
+        content()
+        return
+    }
+    val role by viewModel.currentRole.collectAsState()
+    val hasNavigated = remember { mutableStateOf(false) }
+    LaunchedEffect(role) {
+        if (!hasNavigated.value && role.isNotEmpty() && role != "admin") {
+            if (navController.currentBackStackEntry?.lifecycle?.currentState == Lifecycle.State.RESUMED) {
+                hasNavigated.value = true
+                navController.navigate(Screen.EmployeeHome.route) {
+                    popUpTo(Screen.Login.route) { inclusive = true }
+                }
+            }
+        }
+    }
+    if (role == "admin") content()
+}
+
+@Composable
 fun NavGraph(
     navController: NavHostController = rememberNavController(),
     startDestination: String = Screen.Login.route,
@@ -68,6 +101,7 @@ fun NavGraph(
     onDarkModeChange: (Boolean) -> Unit,
     language: String = "es",
     onLanguageChange: (String) -> Unit = {},
+    viewModel: BioSecureViewModel? = null,
     authRepository: AuthRepository? = null
 ) {
     NavHost(
@@ -78,16 +112,16 @@ fun NavGraph(
             SplashScreen(
                 navController = navController,
                 authRepository = authRepository,
-                viewModel = null
+                viewModel = viewModel
             )
         }
 
         composable(Screen.Login.route) {
-            LoginScreen(navController = navController, viewModel = null)
+            LoginScreen(navController = navController, viewModel = viewModel)
         }
 
         composable(Screen.Confirmation.route) {
-            ConfirmationScreen(navController = navController, viewModel = null)
+            ConfirmationScreen(navController = navController, viewModel = viewModel)
         }
 
         // Admin routes
@@ -103,38 +137,52 @@ fun NavGraph(
         ) { backStackEntry ->
             val rawSedeId = backStackEntry.arguments?.getString("sedeId")
             val sedeId = if (rawSedeId == "null") null else rawSedeId
-            DashboardScreen(navController = navController, viewModel = null, sedeId = sedeId)
+            AdminRouteGuard(viewModel = viewModel, navController = navController) {
+                DashboardScreen(navController = navController, viewModel = viewModel, sedeId = sedeId)
+            }
         }
         composable(Screen.AdminScan.route) {
-            ScanScreen(navController = navController, isAdmin = true, viewModel = null)
+            AdminRouteGuard(viewModel = viewModel, navController = navController) {
+                ScanScreen(navController = navController, isAdmin = true, viewModel = viewModel)
+            }
         }
         composable(Screen.AdminHistory.route) {
-            HistoryScreen(navController = navController, isAdmin = true, viewModel = null)
+            AdminRouteGuard(viewModel = viewModel, navController = navController) {
+                HistoryScreen(navController = navController, isAdmin = true, viewModel = viewModel)
+            }
         }
         composable(Screen.AdminSettings.route) {
-            SettingsScreen(
-                navController = navController,
-                isAdmin = true,
-                isDarkMode = isDarkMode,
-                onDarkModeChange = onDarkModeChange,
-                language = language,
-                onLanguageChange = onLanguageChange,
-                viewModel = null
-            )
+            AdminRouteGuard(viewModel = viewModel, navController = navController) {
+                SettingsScreen(
+                    navController = navController,
+                    isAdmin = true,
+                    isDarkMode = isDarkMode,
+                    onDarkModeChange = onDarkModeChange,
+                    language = language,
+                    onLanguageChange = onLanguageChange,
+                    viewModel = viewModel
+                )
+            }
         }
         composable(Screen.AdminEmployeeList.route) {
-            EmployeeListScreen(navController = navController, viewModel = null, sedeId = null)
+            AdminRouteGuard(viewModel = viewModel, navController = navController) {
+                EmployeeListScreen(navController = navController, viewModel = viewModel, sedeId = null)
+            }
         }
         composable(
             route = Screen.AdminEditEmployee.route
         ) { backStackEntry ->
             val userId = backStackEntry.arguments?.getString("userId")
             if (userId != null) {
-                EditEmployeeScreen(navController = navController, userId = userId, viewModel = null)
+                AdminRouteGuard(viewModel = viewModel, navController = navController) {
+                    EditEmployeeScreen(navController = navController, userId = userId, viewModel = viewModel)
+                }
             }
         }
         composable(Screen.AdminQRScan.route) {
-            QRScannerScreen(navController = navController, viewModel = null)
+            AdminRouteGuard(viewModel = viewModel, navController = navController) {
+                QRScannerScreen(navController = navController, viewModel = viewModel)
+            }
         }
         composable(
             route = Screen.AdminEmployeeQR.route,
@@ -144,35 +192,37 @@ fun NavGraph(
             AdminEmployeeQRScreen(navController = navController, uid = uid)
         }
         composable(Screen.AdminSedes.route) {
-            SedesScreen(navController = navController, viewModel = null)
+            AdminRouteGuard(viewModel = viewModel, navController = navController) {
+                SedesScreen(navController = navController, viewModel = viewModel)
+            }
         }
         composable(Screen.AdminShiftSettings.route) {
-            AdminRouteGuard(viewModel = null, navController = navController) {
-                ShiftSettingsScreen(navController = navController, viewModel = null)
+            AdminRouteGuard(viewModel = viewModel, navController = navController) {
+                ShiftSettingsScreen(navController = navController, viewModel = viewModel)
             }
         }
         composable(Screen.AdminShiftManager.route) {
-            AdminRouteGuard(viewModel = null, navController = navController) {
-                ShiftManagerScreen(navController = navController, viewModel = null)
+            AdminRouteGuard(viewModel = viewModel, navController = navController) {
+                ShiftManagerScreen(navController = navController, viewModel = viewModel)
             }
         }
 
         // Employee routes
         composable(Screen.EmployeeHome.route) {
-            EmployeeDashboard(navController = navController, viewModel = null)
+            EmployeeDashboard(navController = navController, viewModel = viewModel)
         }
         composable(Screen.EmployeeQR.route) {
             com.biosecure.app.ui.screens.employee.QRScreen(
                 navController = navController,
                 authRepository = authRepository,
-                viewModel = null
+                viewModel = viewModel
             )
         }
         composable(Screen.EmployeeScan.route) {
-            ScanScreen(navController = navController, isAdmin = false, viewModel = null)
+            ScanScreen(navController = navController, isAdmin = false, viewModel = viewModel)
         }
         composable(Screen.EmployeeHistory.route) {
-            HistoryScreen(navController = navController, isAdmin = false, viewModel = null)
+            HistoryScreen(navController = navController, isAdmin = false, viewModel = viewModel)
         }
         composable(Screen.EmployeeSettings.route) {
             SettingsScreen(
@@ -182,7 +232,7 @@ fun NavGraph(
                 onDarkModeChange = onDarkModeChange,
                 language = language,
                 onLanguageChange = onLanguageChange,
-                viewModel = null
+                viewModel = viewModel
             )
         }
     }
