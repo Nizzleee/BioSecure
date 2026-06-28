@@ -182,24 +182,7 @@ BUILD SUCCESSFUL in 3s
 
 ---
 
-## Iteración 12 — Merge alpha, GPS, callbackFlow y flujo sede-first (COMPLETADO — Adrian)
-
-### Resumen
-
-Documentación de los cambios de navegación e integración realizados durante la iteración 12: conexión completa del `NavGraph` con rutas separadas por rol (admin/empleado), `AdminRouteGuard` para proteger rutas administrativas, parametrización de `Screen.Dashboard` por `sedeId` para soportar el flujo sede-first, registro de rutas de QR con `NavType.StringType`, y ajuste de la barra inferior administrativa para mostrar el tab "Sedes". Incluye también la corrección en `RegisterEmployeeScreen` para heredar el `companyId` del admin autenticado al crear un nuevo empleado, y el fix de redirección post-login según el rol detectado (`admin` → `AdminSedes`, `empleado` → `EmployeeScan`).
-
-### Archivos modificados
-
-| Archivo | Cambio |
-|---|---|
-| `ui/navigation/NavGraph.kt` | NavHost con rutas base, conexión de pantallas por rol, `startDestination` condicional + `authRepository`, rutas QR con `NavType.StringType`, `Screen.Splash` con `popUpTo` inclusivo, rutas de turnos (`AdminShiftSettings`, `AdminShiftManager`) con `AdminRouteGuard`, `Screen.Dashboard` parametrizado con `sedeId` vía `navArgument` nullable, `AdminRouteGuard` implementado |
-| `ui/screens/login/LoginScreen.kt` | Conexión con `viewModel`, manejo de `authError`, redirección por rol tras login |
-| `MainActivity.kt` | `authRepository` inyectado como parámetro de `NavGraph` |
-| `ui/screens/admin/RegisterEmployeeScreen.kt` | Herencia de `companyId` del admin al registrar nuevo empleado |
-| `ui/screens/dashboard/DashboardScreen.kt` | `QuickActionCard` de Gestor de Turnos con navegación a `ShiftManagerScreen` |
-| `ui/screens/scan/ScanScreen.kt` | `BioSecureBottomBar` admin: tab "Sedes" en lugar de "Scan" |
-
-
+## Iteración 11 — Merge alpha v0.2: ShiftManager, SedesScreen con Maps, modelos enterprise (COMPLETADO)
 
 ### Resumen
 

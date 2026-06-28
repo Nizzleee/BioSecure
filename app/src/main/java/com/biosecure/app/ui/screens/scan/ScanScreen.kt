@@ -467,7 +467,8 @@ fun BioSecureBottomBar(
             listOf(
                 Triple(Screen.Dashboard.route("null"), if (lang == "en") "PANEL" else "PANEL", "📊"),
                 Triple(Screen.AdminSedes.route, if (lang == "en") "BRANCHES" else "SEDES", "🏢"),
-                Triple(Screen.history(true), if (lang == "en") "HISTORY" else "HISTORIAL", "🕐"),                Triple(Screen.settings(true), if (lang == "en") "SETTINGS" else "AJUSTES", "⚙️")
+                Triple(Screen.history(true), if (lang == "en") "HISTORY" else "HISTORIAL", "🕐"),
+                Triple(Screen.settings(true), if (lang == "en") "SETTINGS" else "AJUSTES", "⚙️")
             )
         } else {
             listOf(

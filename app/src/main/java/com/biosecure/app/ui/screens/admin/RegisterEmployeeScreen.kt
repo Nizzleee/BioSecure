@@ -322,12 +322,14 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
                                 ?: throw Exception("No se pudo obtener UID del empleado")
                             secondaryAuth.signOut()
 
+                            val cid = companyId
                             val userData = hashMapOf(
                                 "email" to email.trim(),
                                 "role" to "employee",
                                 "name" to "${firstName.trim()} ${lastName.trim()}",
                                 "department" to departamento.trim(),
-                                "cargo" to cargo.trim()
+                                "cargo" to cargo.trim(),
+                                "companyId" to cid
                             )
                             if (selectedSedeId.isNotEmpty()) {
                                 userData["sedeId"] = selectedSedeId

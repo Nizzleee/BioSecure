@@ -16,6 +16,9 @@ import com.biosecure.app.ui.navigation.NavGraph
 import com.biosecure.app.ui.theme.BioSecureTheme
 import com.biosecure.app.ui.viewmodel.BioSecureViewModel
 import com.biosecure.app.ui.viewmodel.BioSecureViewModelFactory
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,6 +49,15 @@ class MainActivity : FragmentActivity() {
         val factory = BioSecureViewModelFactory(authRepository, attendanceRepository, functionsRepository, themePreferences)
         val viewModel = ViewModelProvider(this, factory)[BioSecureViewModel::class.java]
 
+        FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+            FirebaseAuth.getInstance().currentUser?.uid?.let { uid ->
+                FirebaseFirestore.getInstance()
+                    .collection("users")
+                    .document(uid)
+                    .update("fcmToken", token)
+            }
+        }
+
         setContent {
             val isDarkPref by viewModel.isDarkMode.collectAsState()
             val systemTheme = isSystemInDarkTheme()
@@ -54,7 +66,6 @@ class MainActivity : FragmentActivity() {
 
             BioSecureTheme(darkTheme = isDarkMode) {
                 NavGraph(
-                    startDestination = com.biosecure.app.ui.navigation.Screen.Login.route,
                     isDarkMode = isDarkMode,
                     onDarkModeChange = { viewModel.setDarkMode(it) },
                     language = language,
