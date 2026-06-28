@@ -5,6 +5,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.biosecure.app.data.repository.AuthRepository
 import com.biosecure.app.ui.screens.admin.EditEmployeeScreen
 import com.biosecure.app.ui.screens.admin.EmployeeListScreen
 import com.biosecure.app.ui.screens.admin.QRScannerScreen
@@ -49,14 +50,16 @@ sealed class Screen(val route: String) {
 @Composable
 fun NavGraph(
     navController: NavHostController = rememberNavController(),
+    startDestination: String = Screen.Login.route,
     isDarkMode: Boolean,
     onDarkModeChange: (Boolean) -> Unit,
     language: String = "es",
-    onLanguageChange: (String) -> Unit = {}
+    onLanguageChange: (String) -> Unit = {},
+    authRepository: AuthRepository? = null
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Login.route
+        startDestination = startDestination
     ) {
         composable(Screen.Login.route) {
             LoginScreen(navController = navController, viewModel = null)
