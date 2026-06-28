@@ -20,8 +20,10 @@ import com.biosecure.app.ui.screens.history.HistoryScreen
 import com.biosecure.app.ui.screens.login.LoginScreen
 import com.biosecure.app.ui.screens.scan.ScanScreen
 import com.biosecure.app.ui.screens.settings.SettingsScreen
+import com.biosecure.app.ui.screens.splash.SplashScreen
 
 sealed class Screen(val route: String) {
+    object Splash : Screen("splash")
     object Login : Screen("login")
     object Confirmation : Screen("confirmation")
 
@@ -68,6 +70,14 @@ fun NavGraph(
         navController = navController,
         startDestination = startDestination
     ) {
+        composable(Screen.Splash.route) {
+            SplashScreen(
+                navController = navController,
+                authRepository = authRepository,
+                viewModel = null
+            )
+        }
+
         composable(Screen.Login.route) {
             LoginScreen(navController = navController, viewModel = null)
         }
