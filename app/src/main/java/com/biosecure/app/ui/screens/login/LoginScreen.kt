@@ -46,9 +46,13 @@ fun LoginScreen(navController: NavController, viewModel: BioSecureViewModel? = n
         authSuccess?.let { role ->
             prefs.edit().putString("last_email", email).apply()
             viewModel?.clearAuthSuccess()
-            // Redirección genérica por rol, pendiente de afinar rutas específicas de sede/scan
-            navController.navigate(Screen.EmployeeHome.route) {
-                popUpTo(Screen.Login.route) { inclusive = true }
+            when (role) {
+                "admin" -> navController.navigate(Screen.AdminSedes.route) {
+                    popUpTo(Screen.Login.route) { inclusive = true }
+                }
+                else -> navController.navigate(Screen.EmployeeScan.route) {
+                    popUpTo(Screen.Login.route) { inclusive = true }
+                }
             }
         }
     }
