@@ -2,10 +2,13 @@ package com.biosecure.app.ui.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.biosecure.app.data.repository.AuthRepository
+import com.biosecure.app.ui.screens.admin.AdminEmployeeQRScreen
 import com.biosecure.app.ui.screens.admin.EditEmployeeScreen
 import com.biosecure.app.ui.screens.admin.EmployeeListScreen
 import com.biosecure.app.ui.screens.admin.QRScannerScreen
@@ -32,6 +35,9 @@ sealed class Screen(val route: String) {
         fun route(userId: String) = "admin/edit-employee/$userId"
     }
     object AdminQRScan : Screen("admin/qr-scan")
+    object AdminEmployeeQR : Screen("admin/employee-qr/{uid}") {
+        fun route(uid: String) = "admin/employee-qr/$uid"
+    }
     object AdminSedes : Screen("admin/sedes")
 
     // Employee routes
@@ -39,6 +45,7 @@ sealed class Screen(val route: String) {
     object EmployeeScan : Screen("employee/scan")
     object EmployeeHistory : Screen("employee/history")
     object EmployeeSettings : Screen("employee/settings")
+    object EmployeeQR : Screen("employee/qr")
 
     companion object {
         fun scan(isAdmin: Boolean) = if (isAdmin) AdminScan.route else EmployeeScan.route
@@ -104,6 +111,13 @@ fun NavGraph(
         composable(Screen.AdminQRScan.route) {
             QRScannerScreen(navController = navController, viewModel = null)
         }
+        composable(
+            route = Screen.AdminEmployeeQR.route,
+            arguments = listOf(navArgument("uid") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val uid = backStackEntry.arguments?.getString("uid") ?: ""
+            AdminEmployeeQRScreen(navController = navController, uid = uid)
+        }
         composable(Screen.AdminSedes.route) {
             SedesScreen(navController = navController, viewModel = null)
         }
@@ -111,6 +125,13 @@ fun NavGraph(
         // Employee routes
         composable(Screen.EmployeeHome.route) {
             EmployeeDashboard(navController = navController, viewModel = null)
+        }
+        composable(Screen.EmployeeQR.route) {
+            com.biosecure.app.ui.screens.employee.QRScreen(
+                navController = navController,
+                authRepository = authRepository,
+                viewModel = null
+            )
         }
         composable(Screen.EmployeeScan.route) {
             ScanScreen(navController = navController, isAdmin = false, viewModel = null)
