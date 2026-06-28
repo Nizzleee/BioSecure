@@ -13,6 +13,7 @@ import com.biosecure.app.ui.screens.admin.EditEmployeeScreen
 import com.biosecure.app.ui.screens.admin.EmployeeListScreen
 import com.biosecure.app.ui.screens.admin.QRScannerScreen
 import com.biosecure.app.ui.screens.admin.SedesScreen
+import com.biosecure.app.ui.screens.admin.ShiftSettingsScreen
 import com.biosecure.app.ui.screens.confirmation.ConfirmationScreen
 import com.biosecure.app.ui.screens.dashboard.DashboardScreen
 import com.biosecure.app.ui.screens.employee.EmployeeDashboard
@@ -41,8 +42,7 @@ sealed class Screen(val route: String) {
         fun route(uid: String) = "admin/employee-qr/$uid"
     }
     object AdminSedes : Screen("admin/sedes")
-
-    // Employee routes
+    object AdminShiftSettings : Screen("admin/shift-settings")
     object EmployeeHome : Screen("employee/home")
     object EmployeeScan : Screen("employee/scan")
     object EmployeeHistory : Screen("employee/history")
@@ -130,6 +130,11 @@ fun NavGraph(
         }
         composable(Screen.AdminSedes.route) {
             SedesScreen(navController = navController, viewModel = null)
+        }
+        composable(Screen.AdminShiftSettings.route) {
+            AdminRouteGuard(viewModel = null, navController = navController) {
+                ShiftSettingsScreen(navController = navController, viewModel = null)
+            }
         }
 
         // Employee routes
