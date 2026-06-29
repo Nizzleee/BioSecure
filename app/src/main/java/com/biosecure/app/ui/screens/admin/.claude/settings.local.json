@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.\\\\gradlew.bat build *)",
+      "Read(//mnt/c/Users/User/Desktop/**)",
+      "Bash(./gradlew build *)"
+    ]
+  }
+}
