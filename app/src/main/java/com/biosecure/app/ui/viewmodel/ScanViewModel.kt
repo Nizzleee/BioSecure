@@ -37,9 +37,8 @@ class ScanViewModel : ViewModel() {
 
     private fun startTimer() {
         timerJob = viewModelScope.launch {
-            val formatter = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
             while (true) {
-                _currentTime.value = formatter.format(Date())
+                _currentTime.value = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
                 delay(1000L)
             }
         }
