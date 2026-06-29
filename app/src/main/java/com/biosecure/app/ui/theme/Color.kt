@@ -15,6 +15,7 @@ val TextSecondary = Color(0xFF6B7280)
 val White = Color(0xFFFFFFFF)
 val ErrorRed = Color(0xFFE53E3E)
 val SuccessGreen = Color(0xFF38A169)
+val WarnOrange = Color(0xFFED8936)
 
 // Dark Mode Colors
 val DarkBackground = Color(0xFF121212)

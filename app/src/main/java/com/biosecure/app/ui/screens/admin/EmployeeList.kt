@@ -1,85 +1,153 @@
 package com.biosecure.app.ui.screens.admin
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.biosecure.app.data.network.DjangoEmployee
-import com.biosecure.app.data.network.RetrofitInstance
+import com.biosecure.app.data.model.User
 import com.biosecure.app.ui.navigation.Screen
 import com.biosecure.app.ui.theme.ErrorRed
+import com.biosecure.app.ui.theme.SuccessGreen
+import com.biosecure.app.ui.theme.shimmerEffect
 import com.biosecure.app.ui.viewmodel.BioSecureViewModel
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EmployeeListScreen(navController: NavController, viewModel: BioSecureViewModel? = null) {
-    var employees by remember { mutableStateOf<List<DjangoEmployee>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var employeeToDelete by remember { mutableStateOf<DjangoEmployee?>(null) }
+fun EmployeeListScreen(navController: NavController, viewModel: BioSecureViewModel? = null, sedeId: String? = null) {
+    val allEmployees by (viewModel?.users ?: MutableStateFlow(emptyList<User>())).collectAsState()
+    val employees = if (sedeId != null) allEmployees.filter { it.sedeId == sedeId } else allEmployees
+    val shifts by (viewModel?.shifts ?: MutableStateFlow(emptyList<com.biosecure.app.data.model.Shift>())).collectAsState()
+    val isLoading by (viewModel?.isLoading ?: MutableStateFlow(false)).collectAsState()
+
+    var selectedEmployee by remember { mutableStateOf<User?>(null) }
+    var showDeleteDialog by remember { mutableStateOf<User?>(null) }
+    var showShiftDialog by remember { mutableStateOf<User?>(null) }
+    val sheetState = rememberModalBottomSheetState()
+    var showSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        try {
-            employees = RetrofitInstance.api.getDjangoEmployees()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        } finally {
-            isLoading = false
+        viewModel?.loadUsers()
+        viewModel?.currentCompanyId?.value?.let {
+            if (it.isNotEmpty()) viewModel.loadCompanyConfig(it)
         }
     }
 
-    employeeToDelete?.let { emp ->
+    if (showSheet && selectedEmployee != null) {
+        ModalBottomSheet(
+            onDismissRequest = { showSheet = false },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            EmployeeActionSheetContent(
+                user = selectedEmployee!!,
+                onEdit = {
+                    showSheet = false
+                    navController.navigate(Screen.AdminEditEmployee.route(it.uid))
+                },
+                onToggleStatus = {
+                    viewModel?.toggleEmployeeStatus(it.uid, it.isActive)
+                    showSheet = false
+                },
+                onAssignShift = {
+                    showSheet = false
+                    showShiftDialog = it
+                },
+                onDelete = {
+                    showSheet = false
+                    showDeleteDialog = it
+                }
+            )
+        }
+    }
+
+    if (showShiftDialog != null) {
         AlertDialog(
-            onDismissRequest = { employeeToDelete = null },
+            onDismissRequest = { showShiftDialog = null },
+            title = { Text("Asignar Turno", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    shifts.forEach { shift ->
+                        ListItem(
+                            headlineContent = { Text(shift.name) },
+                            supportingContent = { Text("${shift.startTime} - ${shift.endTime}") },
+                            modifier = Modifier.clickable {
+                                viewModel?.assignShiftToEmployee(showShiftDialog!!.uid, shift.id)
+                                showShiftDialog = null
+                            },
+                            trailingContent = {
+                                if (showShiftDialog?.shiftId == shift.id) {
+                                    Icon(Icons.Default.CheckCircle, null, tint = SuccessGreen)
+                                }
+                            }
+                        )
+                    }
+                    if (shifts.isEmpty()) {
+                        Text(
+                            "No hay turnos configurados. Ve a ajustes para crearlos.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showShiftDialog = null }) { Text("Cerrar") }
+            }
+        )
+    }
+
+    showDeleteDialog?.let { user ->
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = null },
             title = { Text("Eliminar empleado", fontWeight = FontWeight.Bold) },
-            text = { Text("¿Eliminar a ${emp.first_name} ${emp.last_name}?") },
+            text = { Text("¿Estás seguro de eliminar a ${user.firstName} ${user.lastName}?") },
             confirmButton = {
                 TextButton(onClick = {
-                    kotlinx.coroutines.MainScope().launch {
-                        try {
-                            RetrofitInstance.api.deleteDjangoEmployee(emp.id)
-                            employees = employees.filter { it.id != emp.id }
-                        } catch (e: Exception) { e.printStackTrace() }
-                    }
-                    employeeToDelete = null
+                    viewModel?.deleteFirestoreEmployee(user.uid)
+                    showDeleteDialog = null
                 }) {
-                    Text("Eliminar", color = ErrorRed, fontWeight = FontWeight.SemiBold)
+                    Text("Eliminar", color = ErrorRed)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { employeeToDelete = null }) { Text("Cancelar") }
-            },
-            containerColor = MaterialTheme.colorScheme.surface
+                TextButton(onClick = { showDeleteDialog = null }) { Text("Cancelar") }
+            }
         )
     }
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = {
-                    Text("Lista de Empleados",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold)
-                },
+                title = { Text("Gestión de Empleados", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                     navigationIconContentColor = MaterialTheme.colorScheme.onBackground
@@ -88,57 +156,160 @@ fun EmployeeListScreen(navController: NavController, viewModel: BioSecureViewMod
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        if (isLoading) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Color(0xFF00B4A6))
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(vertical = 16.dp)
-            ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(vertical = 16.dp)
+        ) {
+            if (isLoading && employees.isEmpty()) {
+                items(6) { EmployeeSkeletonItem() }
+            } else {
                 item {
-                    Text("${employees.size} empleados registrados",
+                    Text(
+                        "${employees.size} miembros en total",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                        modifier = Modifier.padding(bottom = 4.dp))
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
-                items(employees, key = { it.id }) { emp ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.cardElevation(2.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = "👤", fontSize = 36.sp)
-                            Spacer(Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("${emp.first_name} ${emp.last_name}",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface)
-                                Text(emp.email,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                                Text(emp.department,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF00B4A6))
-                            }
-                            IconButton(onClick = { navController.navigate(Screen.AdminEditEmployee.route(emp.id)) }) {
-                                Icon(Icons.Default.Edit, null, tint = Color(0xFF00B4A6), modifier = Modifier.size(20.dp))
-                            }
-                            IconButton(onClick = { employeeToDelete = emp }) {
-                                Icon(Icons.Default.Delete, null, tint = ErrorRed, modifier = Modifier.size(20.dp))
-                            }
-                        }
+                items(employees, key = { it.uid }) { user ->
+                    val shiftName = shifts.find { it.id == user.shiftId }?.name ?: ""
+                    EmployeeCard(
+                        user = user,
+                        onActionClick = {
+                            selectedEmployee = user
+                            showSheet = true
+                        },
+                        shiftName = shiftName
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EmployeeCard(user: User, onActionClick: () -> Unit, shiftName: String = "") {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(contentAlignment = Alignment.BottomEnd) {
+                Surface(
+                    modifier = Modifier.size(48.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = user.firstName.take(1) + user.lastName.take(1),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     }
                 }
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(if (user.isActive) SuccessGreen else Color.Gray)
+                        .border(2.dp, MaterialTheme.colorScheme.surface, CircleShape)
+                )
             }
+
+            Spacer(Modifier.width(16.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "${user.firstName} ${user.lastName}",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        user.cargo.ifEmpty { "Sin cargo" },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (shiftName.isNotEmpty()) {
+                        Text(
+                            " • $shiftName",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
+                if (!user.isActive) {
+                    Text(
+                        "Cuenta Desactivada",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = ErrorRed,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            IconButton(onClick = onActionClick) {
+                Icon(Icons.Default.MoreVert, contentDescription = "Acciones", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+fun EmployeeActionSheetContent(
+    user: User,
+    onEdit: (User) -> Unit,
+    onToggleStatus: (User) -> Unit,
+    onAssignShift: (User) -> Unit,
+    onDelete: (User) -> Unit
+) {
+    Column(modifier = Modifier.padding(bottom = 32.dp)) {
+        ListItem(
+            headlineContent = { Text("Editar información") },
+            leadingContent = { Icon(Icons.Default.Edit, null) },
+            modifier = Modifier.clickable { onEdit(user) }
+        )
+        ListItem(
+            headlineContent = { Text("Asignar Turno") },
+            leadingContent = { Icon(Icons.Default.Schedule, null) },
+            modifier = Modifier.clickable { onAssignShift(user) }
+        )
+        ListItem(
+            headlineContent = { Text(if (user.isActive) "Desactivar empleado" else "Activar empleado") },
+            supportingContent = { Text(if (user.isActive) "No podrá marcar asistencia" else "Podrá volver a marcar") },
+            leadingContent = { Icon(Icons.Default.PowerSettingsNew, null) },
+            trailingContent = { Switch(checked = user.isActive, onCheckedChange = { onToggleStatus(user) }) }
+        )
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        ListItem(
+            headlineContent = { Text("Eliminar permanentemente", color = ErrorRed) },
+            leadingContent = { Icon(Icons.Default.Delete, null, tint = ErrorRed) },
+            modifier = Modifier.clickable { onDelete(user) }
+        )
+    }
+}
+
+@Composable
+fun EmployeeSkeletonItem() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.size(48.dp).clip(CircleShape).shimmerEffect())
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.width(120.dp).height(16.dp).shimmerEffect())
+            Spacer(Modifier.height(8.dp))
+            Box(modifier = Modifier.width(80.dp).height(12.dp).shimmerEffect())
         }
     }
 }
