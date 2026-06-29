@@ -1,77 +1,83 @@
 package com.biosecure.app.ui.screens.admin
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.biosecure.app.data.network.EmployeeRequest
-import com.biosecure.app.data.repository.UserRepository
+import com.biosecure.app.data.model.Sede
+import com.biosecure.app.data.model.Shift
+import com.biosecure.app.ui.navigation.Screen
 import com.biosecure.app.ui.theme.*
 import com.biosecure.app.ui.viewmodel.BioSecureViewModel
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureViewModel? = null) {
+    val context = LocalContext.current
 
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
     var cargo by remember { mutableStateOf("") }
     var departamento by remember { mutableStateOf("") }
 
+    var selectedShiftId by remember { mutableStateOf("") }
+    var selectedShiftName by remember { mutableStateOf("") }
+    var shiftDropdownExpanded by remember { mutableStateOf(false) }
+
+    var selectedSedeId by remember { mutableStateOf("") }
+    var selectedSedeName by remember { mutableStateOf("") }
+    var sedeDropdownExpanded by remember { mutableStateOf(false) }
+
+    val shifts by (viewModel?.shifts ?: MutableStateFlow(emptyList<Shift>())).collectAsState()
+    val sedes by (viewModel?.sedes ?: MutableStateFlow(emptyList<Sede>())).collectAsState()
+    val companyId by (viewModel?.currentCompanyId ?: MutableStateFlow("")).collectAsState()
+
     var isLoading by remember { mutableStateOf(false) }
-    var registeredId by remember { mutableStateOf<Int?>(null) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
     val scope = rememberCoroutineScope()
-    val clipboard = LocalClipboardManager.current
-    val repository = remember { UserRepository() }
 
-    val snackbarHostState = remember { SnackbarHostState() }
-    val lastCreatedUser by (viewModel?.lastCreatedUser
-        ?: kotlinx.coroutines.flow.MutableStateFlow(null)).collectAsState()
-    val vmIsLoading by (viewModel?.isLoading
-        ?: kotlinx.coroutines.flow.MutableStateFlow(false)).collectAsState()
-    val effectiveIsLoading = if (viewModel != null) vmIsLoading else isLoading
-
-    LaunchedEffect(lastCreatedUser) {
-        lastCreatedUser?.let { user ->
-            registeredId = user.id
-            snackbarHostState.showSnackbar("Empleado registrado con ID: ${user.id}")
-            viewModel?.clearLastCreatedUser()
-        }
+    LaunchedEffect(companyId) {
+        if (companyId.isNotEmpty()) viewModel?.loadCompanyConfig(companyId)
     }
 
     val isFormValid = firstName.isNotBlank() && lastName.isNotBlank() &&
-            email.isNotBlank() && cargo.isNotBlank() && departamento.isNotBlank()
+            email.isNotBlank() && password.length >= 6 &&
+            cargo.isNotBlank() && departamento.isNotBlank()
 
     val fieldShape = RoundedCornerShape(12.dp)
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Teal,
+        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+        focusedBorderColor = MaterialTheme.colorScheme.outline,
         unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-        focusedLabelColor = Teal,
-        cursorColor = Teal
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+        focusedLabelColor = MaterialTheme.colorScheme.primary,
+        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        cursorColor = MaterialTheme.colorScheme.primary
     )
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
@@ -83,13 +89,10 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Volver"
-                        )
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                     navigationIconContentColor = MaterialTheme.colorScheme.onBackground
@@ -108,277 +111,262 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (registeredId != null) {
-                // ── Estado de éxito ──────────────────────────────────────
-                Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Datos del nuevo empleado",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
 
-                Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .background(SuccessGreen.copy(alpha = 0.12f), CircleShape)
-                        .align(Alignment.CenterHorizontally),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = SuccessGreen,
-                        modifier = Modifier.size(64.dp)
-                    )
-                }
+            OutlinedTextField(
+                value = firstName,
+                onValueChange = { firstName = it },
+                label = { Text("Nombre") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = fieldShape,
+                colors = fieldColors,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = lastName,
+                onValueChange = { lastName = it },
+                label = { Text("Apellido") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = fieldShape,
+                colors = fieldColors,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = fieldShape,
+                colors = fieldColors,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Contraseña (mín. 6 caracteres)") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = fieldShape,
+                colors = fieldColors,
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation()
+            )
+            OutlinedTextField(
+                value = cargo,
+                onValueChange = { cargo = it },
+                label = { Text("Cargo") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = fieldShape,
+                colors = fieldColors,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = departamento,
+                onValueChange = { departamento = it },
+                label = { Text("Departamento") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = fieldShape,
+                colors = fieldColors,
+                singleLine = true
+            )
 
-                Text(
-                    text = "¡Empleado Registrado!",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = SuccessGreen,
-                    textAlign = TextAlign.Center,
+            // Sede dropdown
+            if (sedes.isNotEmpty()) {
+                ExposedDropdownMenuBox(
+                    expanded = sedeDropdownExpanded,
+                    onExpandedChange = { sedeDropdownExpanded = it },
                     modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(
-                    text = "${firstName.trim()} ${lastName.trim()} ha sido agregado al sistema.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                // Card con ID generado
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Text(
-                            text = "ID del Empleado",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                        Text(
-                            text = "#${registeredId}",
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "El empleado usará este ID para iniciar sesión",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            textAlign = TextAlign.Center
-                        )
-
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                        )
-
-                        // Datos registrados
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            SummaryRow("Nombre", "${firstName.trim()} ${lastName.trim()}")
-                            SummaryRow("Email", email.trim())
-                            SummaryRow("Cargo", cargo.trim())
-                            SummaryRow("Departamento", departamento.trim())
-                        }
-
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                        )
-
-                        Button(
-                            onClick = {
-                                clipboard.setText(AnnotatedString(registeredId.toString()))
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Teal)
-                        ) {
+                    OutlinedTextField(
+                        value = if (selectedSedeName.isEmpty()) "Sin sede asignada" else selectedSedeName,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Sede") },
+                        trailingIcon = {
                             Icon(
-                                imageVector = Icons.Default.ContentCopy,
+                                imageVector = Icons.Default.ArrowDropDown,
                                 contentDescription = null,
-                                tint = White,
-                                modifier = Modifier.size(18.dp)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Copiar ID",
-                                color = White,
-                                fontWeight = FontWeight.SemiBold
+                        },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        shape = fieldShape,
+                        colors = fieldColors
+                    )
+                    ExposedDropdownMenu(
+                        expanded = sedeDropdownExpanded,
+                        onDismissRequest = { sedeDropdownExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Sin sede asignada", color = MaterialTheme.colorScheme.onSurface) },
+                            onClick = {
+                                selectedSedeId = ""
+                                selectedSedeName = ""
+                                sedeDropdownExpanded = false
+                            }
+                        )
+                        sedes.forEach { sede ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(sede.nombre, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text(
+                                            "Lat: ${String.format("%.4f", sede.lat)}, Lng: ${String.format("%.4f", sede.lng)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    selectedSedeId = sede.id
+                                    selectedSedeName = sede.nombre
+                                    sedeDropdownExpanded = false
+                                }
                             )
                         }
                     }
                 }
+            }
 
-                TextButton(
-                    onClick = {
-                        firstName = ""; lastName = ""; email = ""
-                        cargo = ""; departamento = ""
-                        registeredId = null; errorMsg = null
-                    },
+            // Shift dropdown
+            if (shifts.isNotEmpty()) {
+                ExposedDropdownMenuBox(
+                    expanded = shiftDropdownExpanded,
+                    onExpandedChange = { shiftDropdownExpanded = it },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "Registrar otro empleado",
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                    )
-                }
-
-            } else {
-                // ── Formulario ───────────────────────────────────────────
-                Text(
-                    text = "Datos del nuevo empleado",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-
-                OutlinedTextField(
-                    value = firstName,
-                    onValueChange = { firstName = it },
-                    label = { Text("Nombre") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = fieldShape,
-                    colors = fieldColors,
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = lastName,
-                    onValueChange = { lastName = it },
-                    label = { Text("Apellido") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = fieldShape,
-                    colors = fieldColors,
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("Email") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = fieldShape,
-                    colors = fieldColors,
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = cargo,
-                    onValueChange = { cargo = it },
-                    label = { Text("Cargo") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = fieldShape,
-                    colors = fieldColors,
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = departamento,
-                    onValueChange = { departamento = it },
-                    label = { Text("Departamento") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = fieldShape,
-                    colors = fieldColors,
-                    singleLine = true
-                )
-
-                if (errorMsg != null) {
-                    Text(
-                        text = errorMsg!!,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-
-                Button(
-                    onClick = {
-                        if (viewModel != null) {
-                            viewModel.createEmployee(
-                                firstName = firstName.trim(),
-                                lastName = lastName.trim(),
-                                email = email.trim(),
-                                title = cargo.trim(),
-                                department = departamento.trim()
+                    OutlinedTextField(
+                        value = if (selectedShiftName.isEmpty()) "Sin turno asignado" else selectedShiftName,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Turno") },
+                        trailingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.ArrowDropDown,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                        } else {
-                            scope.launch {
-                                isLoading = true
-                                errorMsg = null
-                                val response = repository.createEmployee(
-                                    EmployeeRequest(
-                                        firstName = firstName.trim(),
-                                        lastName = lastName.trim(),
-                                        email = email.trim(),
-                                        cargo = cargo.trim(),
-                                        departamento = departamento.trim()
-                                    )
-                                )
-                                if (response != null) {
-                                    registeredId = response.id
-                                } else {
-                                    errorMsg = "Error al registrar. Verifica tu conexión."
-                                }
-                                isLoading = false
-                            }
-                        }
-                    },
-                    enabled = isFormValid && !effectiveIsLoading,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                        },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        shape = fieldShape,
+                        colors = fieldColors
                     )
-                ) {
-                    if (effectiveIsLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = White,
-                            strokeWidth = 2.dp
+                    ExposedDropdownMenu(
+                        expanded = shiftDropdownExpanded,
+                        onDismissRequest = { shiftDropdownExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Sin turno asignado", color = MaterialTheme.colorScheme.onSurface) },
+                            onClick = {
+                                selectedShiftId = ""
+                                selectedShiftName = ""
+                                shiftDropdownExpanded = false
+                            }
                         )
-                    } else {
-                        Text(
-                            text = "Registrar Empleado",
-                            color = White,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        shifts.forEach { shift ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(shift.name, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text(
+                                            "${shift.startTime} – ${shift.endTime}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    selectedShiftId = shift.id
+                                    selectedShiftName = shift.name
+                                    shiftDropdownExpanded = false
+                                }
+                            )
+                        }
                     }
+                }
+            }
+
+            if (errorMsg != null) {
+                Text(
+                    text = errorMsg!!,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            Button(
+                onClick = {
+                    scope.launch {
+                        isLoading = true
+                        errorMsg = null
+                        try {
+                            val mainApp = FirebaseApp.getInstance()
+                            val secondaryApp = try {
+                                FirebaseApp.getInstance("secondary")
+                            } catch (e: IllegalStateException) {
+                                FirebaseApp.initializeApp(
+                                    context.applicationContext,
+                                    mainApp.options,
+                                    "secondary"
+                                )!!
+                            }
+                            val secondaryAuth = FirebaseAuth.getInstance(secondaryApp)
+                            secondaryAuth.createUserWithEmailAndPassword(
+                                email.trim(), password
+                            ).await()
+                            val uid = secondaryAuth.currentUser?.uid
+                                ?: throw Exception("No se pudo obtener UID del empleado")
+                            secondaryAuth.signOut()
+
+                            val cid = companyId
+                            val userData = hashMapOf(
+                                "email" to email.trim(),
+                                "role" to "employee",
+                                "name" to "${firstName.trim()} ${lastName.trim()}",
+                                "department" to departamento.trim(),
+                                "cargo" to cargo.trim(),
+                                "companyId" to cid
+                            )
+                            if (selectedSedeId.isNotEmpty()) {
+                                userData["sedeId"] = selectedSedeId
+                            }
+                            if (selectedShiftId.isNotEmpty()) {
+                                userData["shiftId"] = selectedShiftId
+                                userData["shiftName"] = selectedShiftName
+                            }
+                            FirebaseFirestore.getInstance()
+                                .collection("users").document(uid).set(userData).await()
+
+                            navController.navigate(Screen.AdminEmployeeQR.route(uid)) {
+                                popUpTo(Screen.AdminRegisterEmployee.route) { inclusive = true }
+                            }
+                        } catch (e: Exception) {
+                            errorMsg = e.message ?: "Error al registrar empleado"
+                        } finally {
+                            isLoading = false
+                        }
+                    }
+                },
+                enabled = isFormValid && !isLoading,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                )
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = White, strokeWidth = 2.dp)
+                } else {
+                    Text(text = "Registrar Empleado", color = White, fontWeight = FontWeight.SemiBold)
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
         }
-    }
-}
-
-@Composable
-private fun SummaryRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface
-        )
     }
 }
