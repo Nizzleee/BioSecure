@@ -3,6 +3,20 @@
 
 ---
 
+## Demo en video
+
+[![BioSecure Demo](https://img.youtube.com/vi/nNoXH3v_XNI/0.jpg)](https://youtu.be/nNoXH3v_XNI)
+
+> Ver demo completo en YouTube: https://youtu.be/nNoXH3v_XNI
+
+---
+
+## Capturas de pantalla
+
+Las capturas de pantalla del proyecto se encuentran en la carpeta [`screenshots/`](screenshots/).
+
+---
+
 ## Índice
 1. [¿Qué es BioSecure?](#1-qué-es-biosecure)
 2. [¿Cómo funciona?](#2-cómo-funciona)
@@ -10,11 +24,12 @@
 4. [Instalación](#4-instalación)
 5. [Tecnologías usadas](#5-tecnologías-usadas)
 6. [Funcionalidades actuales](#6-funcionalidades-actuales)
-7. [Estructura del proyecto](#7-estructura-del-proyecto)
-8. [Flujo completo de la app](#8-flujo-completo-de-la-app)
-9. [Base de datos Firestore](#9-base-de-datos-firestore)
-10. [Próximamente](#10-próximamente)
-11. [Equipo](#11-equipo)
+7. [Widgets nuevos](#7-widgets-nuevos)
+8. [Estructura del proyecto](#8-estructura-del-proyecto)
+9. [Flujo completo de la app](#9-flujo-completo-de-la-app)
+10. [Base de datos Firestore](#10-base-de-datos-firestore)
+11. [Próximamente](#11-próximamente)
+12. [Equipo](#12-equipo)
 
 ---
 
@@ -237,7 +252,50 @@ El sistema opera con dos roles diferenciados — Admin y Empleado — cuyo acces
 
 ---
 
-## 7. Estructura del proyecto
+## 7. Widgets nuevos
+
+Esta versión Beta04 incorpora nuevos componentes y widgets de UI que mejoran la experiencia del usuario:
+
+### `PullToRefreshBox` — Dashboard Admin
+El `DashboardScreen` ahora envuelve su contenido en un `PullToRefreshBox` (Material3 Experimental). Deslizar hacia abajo recarga empleados, asistencias y configuración de empresa sin salir de la pantalla.
+
+### `WeeklyChartCard` — Gráfica semanal con Vico
+Se integró la librería **Vico** (`com.patrykandpatrick.vico`) para renderizar un gráfico de líneas (`CartesianChartHost` + `LineCartesianLayer`) con los datos de asistencia de la semana. Aparece en la sección "Estadísticas Semanales" del Dashboard Admin.
+
+### `DashboardSkeleton` — Efecto shimmer de carga
+Mientras los datos del dashboard se cargan por primera vez, se muestra un skeleton animado usando el modifier `shimmerEffect()` (definido en `ui/theme/Shimmer.kt`). El efecto es un gradiente lineal animado con `LinearEasing` a 1200ms.
+
+### `Today's Status Card` — EmployeeDashboard
+Tarjeta que muestra el estado de asistencia del día con íconos contextuales:
+- 📋 Sin registro — indica que el empleado aún no ha marcado
+- ⏳ Pendiente de confirmación — registro creado, esperando al admin
+- 🚫 Inasistencia registrada — estado FALLIDO o INASISTENCIA
+- ✅ Asistencia confirmada — EXITOSO o PUNTUAL con hora de entrada
+
+### `Weekly Performance Card` — EmployeeDashboard
+Tarjeta con siete círculos (L M X J V S D / M T W T F S S) que representan cada día de la semana actual. El color del círculo indica el estado:
+- **Verde** (✓) — EXITOSO o PUNTUAL
+- **Naranja** (!) — TARDANZA
+- **Rojo** (✗) — FALLIDO o INASISTENCIA
+- **Gris** — sin registro o día futuro
+
+Incluye contador `N / 7 días con asistencia confirmada`.
+
+### `swipeToNavigate` — Navegación por gestos
+Modifier extension (`ui/components/SwipeNavigation.kt`) que detecta arrastres horizontales con `detectHorizontalDragGestures`. Threshold de 80 px. Implementado en `DashboardScreen`, `EmployeeDashboard` y `ScanScreen` para navegar entre tabs sin tocar la barra inferior.
+
+### `FilterChip` — Selector de sedes
+Fila de chips horizontales desplazables en el Dashboard Admin que permiten filtrar las métricas y el historial por sede. Incluye chip "Todas las Sedes" que resetea el filtro.
+
+### `AnimatedVisibility` — Entrada animada de métricas
+Las `MetricCard` del Dashboard Admin aparecen con `fadeIn() + slideInVertically` al cargar los datos, usando `AnimatedVisibility` de Compose Animation.
+
+### `AI Analysis Card` — Análisis inteligente
+Tarjeta en la sección "Análisis IA" del Dashboard Admin que muestra recomendaciones generadas por el ViewModel basadas en los patrones de asistencia de la empresa.
+
+---
+
+## 8. Estructura del proyecto
 
 ```
 app/src/main/java/com/biosecure/app/
@@ -307,7 +365,7 @@ app/src/main/java/com/biosecure/app/
 
 ---
 
-## 8. Flujo completo de la app
+## 9. Flujo completo de la app
 
 ### Inicio de sesión y detección de rol
 ```
@@ -374,7 +432,7 @@ AdminEmployeeQRScreen:
 
 ---
 
-## 9. Base de datos Firestore
+## 10. Base de datos Firestore
 
 ### Colección `companies/{companyId}`
 
@@ -499,7 +557,7 @@ service cloud.firestore {
 
 ---
 
-## 10. Próximamente
+## 11. Próximamente
 
 | Funcionalidad | Prioridad | Descripción |
 |---|---|---|
@@ -512,7 +570,7 @@ service cloud.firestore {
 
 ---
 
-## 11. Equipo
+## 12. Equipo
 
 | Nombre | Rol |
 |---|---|
