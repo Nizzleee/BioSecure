@@ -13,7 +13,11 @@
 
 ## Capturas de pantalla
 
-Las capturas de pantalla del proyecto se encuentran en la carpeta [`screenshots/`](screenshots/).
+![EmployeeDashboard — estado Pendiente de confirmación](screenshots/8626ad60-6b17-4fbe-bf7f-91309df7c285.jpg)
+
+![Admin Dashboard — panel de control con métricas en tiempo real](screenshots/eba551c4-df75-4063-b424-7bd63051d00b.jpg)
+
+![SedesScreen — gestión de geocercas con Google Maps y slider de radio](screenshots/1a25d66f-e24b-4fbe-9704-2177e9f37c34.jpg)
 
 ---
 
@@ -24,12 +28,13 @@ Las capturas de pantalla del proyecto se encuentran en la carpeta [`screenshots/
 4. [Instalación](#4-instalación)
 5. [Tecnologías usadas](#5-tecnologías-usadas)
 6. [Funcionalidades actuales](#6-funcionalidades-actuales)
-7. [Widgets nuevos](#7-widgets-nuevos)
-8. [Estructura del proyecto](#8-estructura-del-proyecto)
-9. [Flujo completo de la app](#9-flujo-completo-de-la-app)
-10. [Base de datos Firestore](#10-base-de-datos-firestore)
-11. [Próximamente](#11-próximamente)
-12. [Equipo](#12-equipo)
+7. [Componente de IA](#7-componente-de-ia)
+8. [Widgets nuevos](#8-widgets-nuevos)
+9. [Estructura del proyecto](#9-estructura-del-proyecto)
+10. [Flujo completo de la app](#10-flujo-completo-de-la-app)
+11. [Base de datos Firestore](#11-base-de-datos-firestore)
+12. [Próximamente](#12-próximamente)
+13. [Equipo](#13-equipo)
 
 ---
 
@@ -252,7 +257,48 @@ El sistema opera con dos roles diferenciados — Admin y Empleado — cuyo acces
 
 ---
 
-## 7. Widgets nuevos
+## 7. Componente de IA
+
+BioSecure integra **Gemini 1.5 Flash** (con fallback a Gemini 1.5 Pro) para analizar patrones de asistencia en tiempo real.
+
+### Modelo y SDK
+
+| Elemento | Detalle |
+|---|---|
+| Modelo principal | `gemini-1.5-flash` |
+| Modelo de fallback | `gemini-1.5-pro` |
+| SDK Android | `com.google.ai.client.generativeai:generativeai:0.9.0` |
+| Clase SDK | `com.google.ai.client.generativeai.GenerativeModel` |
+
+### Fuente de datos
+
+El modelo lee los últimos **20 registros** del `StateFlow` `_attendanceHistoryFlow`, que es un observador en tiempo real de la colección `attendances` de Firestore filtrada por `companyId` del admin autenticado. De cada registro se extraen los campos:
+
+| Campo Firestore | Descripción |
+|---|---|
+| `userName` | Nombre del empleado |
+| `date` | Fecha del registro (`dd/MM/yyyy`) |
+| `checkIn` | Hora de entrada (`HH:mm`) |
+| `status` | Estado: `PUNTUAL`, `TARDANZA`, `EXITOSO`, `PENDIENTE`, etc. |
+| `location` | Sede donde se registró |
+
+### Prompt y lógica
+
+El prompt enviado al modelo es:
+
+```
+"Genera un resumen ejecutivo de estos registros de asistencia (tendencias, puntualidad): 
+[Nombre]: [fecha] [hora] - [status]
+..."
+```
+
+### Dónde se llama
+
+La función `getAiAnalysis()` en `BioSecureViewModel.kt` construye el prompt, instancia `GenerativeModel` con la clave API almacenada via `ThemePreferences` y actualiza el `StateFlow` `_aiAnalysis`. El resultado se muestra en la **AI Analysis Card** de la sección "Análisis IA" del Dashboard Admin.
+
+---
+
+## 8. Widgets nuevos
 
 Esta versión Beta04 incorpora nuevos componentes y widgets de UI que mejoran la experiencia del usuario:
 
@@ -295,7 +341,7 @@ Tarjeta en la sección "Análisis IA" del Dashboard Admin que muestra recomendac
 
 ---
 
-## 8. Estructura del proyecto
+## 9. Estructura del proyecto
 
 ```
 app/src/main/java/com/biosecure/app/
@@ -365,7 +411,7 @@ app/src/main/java/com/biosecure/app/
 
 ---
 
-## 9. Flujo completo de la app
+## 10. Flujo completo de la app
 
 ### Inicio de sesión y detección de rol
 ```
@@ -432,7 +478,7 @@ AdminEmployeeQRScreen:
 
 ---
 
-## 10. Base de datos Firestore
+## 11. Base de datos Firestore
 
 ### Colección `companies/{companyId}`
 
@@ -557,7 +603,7 @@ service cloud.firestore {
 
 ---
 
-## 11. Próximamente
+## 12. Próximamente
 
 | Funcionalidad | Prioridad | Descripción |
 |---|---|---|
@@ -570,7 +616,7 @@ service cloud.firestore {
 
 ---
 
-## 12. Equipo
+## 13. Equipo
 
 | Nombre | Rol |
 |---|---|
