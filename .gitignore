@@ -15,3 +15,18 @@ google-services.json
 .externalNativeBuild
 .cxx
 local.properties
+
+# Node / Functions
+node_modules/
+functions/node_modules/
+functions/lib/
+
+# Secrets / Keys
+*adminsdk*.json
+serviceAccount*.json
+.env
+*.jks
+*.keystore
+
+# IDE / Local config
+.claude/
