@@ -8,6 +8,17 @@ export interface ShiftConfig {
   toleranceMin: number; // 0 o mayor (acepta 0)
 }
 
+export class AttendanceLogicError extends Error {
+  readonly code: "OUT_OF_WINDOW" | "UNSUPPORTED_SHIFT";
+
+  constructor(code: "OUT_OF_WINDOW" | "UNSUPPORTED_SHIFT", message: string) {
+    super(message);
+    this.name = "AttendanceLogicError";
+    this.code = code;
+    Object.setPrototypeOf(this, AttendanceLogicError.prototype);
+  }
+}
+
 /**
  * Evalúa el estado de asistencia (PUNTUAL o TARDANZA) comparando la hora del servidor
  * con la configuración del turno del usuario.
@@ -27,7 +38,7 @@ export function calculateAttendanceStatus(
 
   // Validación de Turno Nocturno o inviable
   if (endMinutes <= startMinutes) {
-    throw new Error("UNSUPPORTED_SHIFT: Turnos nocturnos o de duración cero no están soportados");
+    throw new AttendanceLogicError("UNSUPPORTED_SHIFT", "UNSUPPORTED_SHIFT: Turnos nocturnos o de duración cero no están soportados");
   }
 
   const currentMinutes = hhMmToMinutes(currentHhMm);
@@ -42,7 +53,7 @@ export function calculateAttendanceStatus(
 
   // Validación estricta de ventana horaria
   if (currentMinutes < minAllowedMinutes || currentMinutes > endMinutes) {
-    throw new Error("OUT_OF_WINDOW: Marcación fuera de la ventana horaria del turno");
+    throw new AttendanceLogicError("OUT_OF_WINDOW", "OUT_OF_WINDOW: Marcación fuera de la ventana horaria del turno");
   }
 
   if (currentMinutes <= punctualLimitMinutes) {
