@@ -554,4 +554,95 @@ describe("registerAttendance — integración real contra emulador Firestore", (
       }
     });
   });
+
+  // -------------------------------------------------------------------------
+  describe("Caminos felices QR y check-out", () => {
+    test("(a) admin escanea empleado válido con QR: éxito, 1 doc, marcadoPor y 1 notificación", async () => {
+      const res = await callAs(
+        UID.adminA,
+        basePayload({ tipo: "QR", qrToken: UID.empA1 })
+      );
+
+      expect(res.type).toBe("CHECK_IN");
+      expect(res.status).toBe("PUNTUAL");
+      expect(res.checkIn).toBe("08:15");
+      expect(res.date).toBe(DATE_DDMMYYYY);
+
+      const doc = await db.collection("attendances").doc(docId(UID.empA1)).get();
+      expect(doc.exists).toBe(true);
+      const data = doc.data()!;
+      expect(data.userId).toBe(UID.empA1);
+      expect(data.marcadoPor).toBe(UID.adminA);
+      expect(data.type).toBe("QR");
+      expect(data.checkIn).toBe("08:15");
+      expect(data.checkOut).toBe("");
+
+      const all = await db.collection("attendances").get();
+      expect(all.size).toBe(1);
+
+      const notifs = await db.collection("notifications").get();
+      expect(notifs.size).toBe(1);
+      expect(notifs.docs[0].data().companyId).toBe(COMPANY_A);
+    });
+
+    test("(b) check-out exitoso: actualiza checkOut y responde CHECK_OUT", async () => {
+      await db.collection("attendances").doc(docId(UID.empA1)).set({
+        userId: UID.empA1,
+        companyId: COMPANY_A,
+        sedeId: SEDE_A,
+        date: DATE_DDMMYYYY,
+        checkIn: "07:00",
+        checkOut: "",
+        status: "PUNTUAL",
+      });
+
+      const res = await callAs(UID.empA1, basePayload({ tipo: "HUELLA" }));
+
+      expect(res.type).toBe("CHECK_OUT");
+      expect(res.checkIn).toBe("07:00");
+      expect(res.checkOut).toBe("08:15");
+      expect(res.status).toBe("PUNTUAL");
+
+      const doc = await db.collection("attendances").doc(docId(UID.empA1)).get();
+      expect(doc.data()!.checkIn).toBe("07:00");
+      expect(doc.data()!.checkOut).toBe("08:15");
+    });
+
+    test("(c) check-out después del tope de horas extra → OUT_OF_WINDOW", async () => {
+      mockClock.iso = "2026-06-25T00:01:00.000Z"; // 19:01 Lima del 24/06
+
+      await db.collection("attendances").doc(docId(UID.empA1)).set({
+        userId: UID.empA1,
+        companyId: COMPANY_A,
+        sedeId: SEDE_A,
+        date: DATE_DDMMYYYY,
+        checkIn: "08:00",
+        checkOut: "",
+        status: "PUNTUAL",
+      });
+
+      await expectError(callAs(UID.empA1, basePayload({ tipo: "HUELLA" })), "OUT_OF_WINDOW");
+
+      const doc = await db.collection("attendances").doc(docId(UID.empA1)).get();
+      expect(doc.data()!.checkOut).toBe("");
+    });
+
+    test("(d) la notificación se crea solo en check-in, no en check-out", async () => {
+      const checkInRes = await callAs(UID.empA1, basePayload({ tipo: "HUELLA" }));
+      expect(checkInRes.type).toBe("CHECK_IN");
+
+      const afterCheckIn = await db.collection("notifications").get();
+      expect(afterCheckIn.size).toBe(1);
+      expect(afterCheckIn.docs[0].data().companyId).toBe(COMPANY_A);
+
+      mockClock.iso = "2026-06-24T13:25:00.000Z"; // 08:25 Lima
+
+      const checkOutRes = await callAs(UID.empA1, basePayload({ tipo: "HUELLA" }));
+      expect(checkOutRes.type).toBe("CHECK_OUT");
+      expect(checkOutRes.checkOut).toBe("08:25");
+
+      const afterCheckOut = await db.collection("notifications").get();
+      expect(afterCheckOut.size).toBe(1);
+    });
+  });
 });
