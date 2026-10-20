@@ -49,8 +49,8 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         (request.auth.uid == userId &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmToken', 'phone', 'image'])) ||
-        (isAdminOfCompany(resource.data.companyId) &&
-         request.resource.data.role == resource.data.role &&
+        (isAdminOfCompany(resource.data.get('companyId', '')) &&
+         resource.data.get('role', '') == 'employee' &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['companyId', 'role', 'uid', 'email']))
       );
 

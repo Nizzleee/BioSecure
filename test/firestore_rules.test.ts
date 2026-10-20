@@ -37,6 +37,13 @@ beforeEach(async () => {
       name: 'Admin A'
     });
 
+    // Segundo Admin de Empresa A
+    await db.collection('users').doc('admin_B2').set({
+      role: 'admin',
+      companyId: 'companyA',
+      name: 'Admin B2'
+    });
+
     // Usuario Empleado de Empresa A
     await db.collection('users').doc('employee_A').set({
       role: 'employee',
@@ -239,13 +246,41 @@ describe('BioSecure Firestore Security Rules - Casos adicionales de escalada y v
     );
   });
 
-  test('Ataque 10: Usuario autenticado sin doc en users no puede leer companies ni attendances', async () => {
+  test('Gemelo positivo 3: Admin A mantiene role employee y cambia phone', async () => {
+    const context = testEnv.authenticatedContext('admin_A');
+    const db = context.firestore();
+
+    await assertSucceeds(
+      db.collection('users').doc('employee_A').update({
+        role: 'employee',
+        phone: '999111333'
+      })
+    );
+  });
+
+  test('Ataque 13: Admin A no puede cambiar el phone de otro admin', async () => {
+    const context = testEnv.authenticatedContext('admin_A');
+    const db = context.firestore();
+
+    await assertFails(
+      db.collection('users').doc('admin_B2').update({
+        phone: '999000111'
+      })
+    );
+  });
+
+  test('Ataque 10a: Usuario autenticado sin doc en users no puede leer companies/companyA', async () => {
     const context = testEnv.authenticatedContext('ghost_uid');
     const db = context.firestore();
 
     await assertFails(
       db.collection('companies').doc('companyA').get()
     );
+  });
+
+  test('Ataque 10b: Usuario autenticado sin doc en users no puede leer attendances', async () => {
+    const context = testEnv.authenticatedContext('ghost_uid');
+    const db = context.firestore();
 
     await assertFails(
       db.collection('attendances').doc('employee_A_20260624').get()
