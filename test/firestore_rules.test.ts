@@ -258,6 +258,41 @@ describe('BioSecure Firestore Security Rules - Casos adicionales de escalada y v
     );
   });
 
+  test('Gemelo positivo 4: Empleado actualiza su propio fcmToken', async () => {
+    const context = testEnv.authenticatedContext('employee_A');
+    const db = context.firestore();
+
+    await assertSucceeds(
+      db.collection('users').doc('employee_A').update({
+        fcmToken: 'token_de_prueba_123'
+      })
+    );
+  });
+
+  test('Gemelo positivo 5: Empleado actualiza su propio phone e image', async () => {
+    const context = testEnv.authenticatedContext('employee_A');
+    const db = context.firestore();
+
+    await assertSucceeds(
+      db.collection('users').doc('employee_A').update({
+        phone: '999777666',
+        image: 'https://example.com/foto.jpg'
+      })
+    );
+  });
+
+  test('Ataque 14: Empleado no puede actualizar fcmToken y sedeId a la vez', async () => {
+    const context = testEnv.authenticatedContext('employee_A');
+    const db = context.firestore();
+
+    await assertFails(
+      db.collection('users').doc('employee_A').update({
+        fcmToken: 'token_de_prueba_123',
+        sedeId: 'sede_hack'
+      })
+    );
+  });
+
   test('Ataque 13: Admin A no puede cambiar el phone de otro admin', async () => {
     const context = testEnv.authenticatedContext('admin_A');
     const db = context.firestore();
