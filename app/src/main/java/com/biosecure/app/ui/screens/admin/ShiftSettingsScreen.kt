@@ -260,7 +260,7 @@ private fun EditShiftDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Editar turno: ${shift.name}", fontWeight = FontWeight.Bold) },
+        title = { Text("Editar turno: ${shift.name}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
         text = {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -319,7 +319,7 @@ private fun EditShiftDialog(
             ) { Text("Guardar", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            TextButton(onClick = onDismiss) { Text("Cancelar", color = MaterialTheme.colorScheme.primary) }
         },
         containerColor = MaterialTheme.colorScheme.surface
     )
@@ -358,7 +358,7 @@ private fun AddShiftDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Nuevo turno", fontWeight = FontWeight.Bold) },
+        title = { Text("Nuevo turno", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -440,7 +440,7 @@ private fun AddShiftDialog(
             ) { Text("Agregar", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            TextButton(onClick = onDismiss) { Text("Cancelar", color = MaterialTheme.colorScheme.primary) }
         },
         containerColor = MaterialTheme.colorScheme.surface
     )
@@ -455,7 +455,7 @@ private fun TimePickerModal(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Seleccionar hora", fontWeight = FontWeight.Bold) },
+        title = { Text("Seleccionar hora", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
         text = {
             Box(
                 modifier = Modifier.fillMaxWidth(),
@@ -470,7 +470,7 @@ private fun TimePickerModal(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar") }
+            TextButton(onClick = onDismiss) { Text("Cancelar", color = MaterialTheme.colorScheme.primary) }
         },
         containerColor = MaterialTheme.colorScheme.surface
     )

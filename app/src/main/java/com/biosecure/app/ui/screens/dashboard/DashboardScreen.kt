@@ -58,7 +58,6 @@ fun DashboardScreen(navController: NavController, viewModel: BioSecureViewModel?
     val dashboardState by (viewModel?.dashboardState ?: MutableStateFlow(DashboardUiState())).collectAsState()
     val firestoreEmployees by (viewModel?.firestoreEmployees ?: MutableStateFlow(emptyList<Map<String, Any>>())).collectAsState()
     val currentUserName by (viewModel?.currentUserName ?: MutableStateFlow("")).collectAsState()
-    val aiAnalysis by (viewModel?.aiAnalysis ?: MutableStateFlow(null)).collectAsState()
     val selectedSedeFromVm by (viewModel?.selectedSedeId ?: MutableStateFlow<String?>(null)).collectAsState()
     val attendanceHistory by (viewModel?.attendanceHistoryFlow ?: MutableStateFlow(emptyList())).collectAsState()
     val companyId by (viewModel?.currentCompanyId ?: MutableStateFlow("")).collectAsState()
@@ -100,7 +99,8 @@ fun DashboardScreen(navController: NavController, viewModel: BioSecureViewModel?
         modifier = Modifier
             .fillMaxSize()
             .swipeToNavigate(
-                onSwipeLeft = { navController.navigateTab(Screen.AdminSedes.route) }
+                onSwipeLeft = { navController.navigateTab(Screen.AdminSedes.route) },
+                onSwipeRight = { navController.navigateTab(Screen.settings(true)) }
             ),
         color = MaterialTheme.colorScheme.background
     ) {
@@ -149,7 +149,7 @@ fun DashboardScreen(navController: NavController, viewModel: BioSecureViewModel?
                                 ) {
                                     MetricCard(
                                         modifier = Modifier.weight(1f),
-                                        lottieAsset = "attendance.json",
+                                        lottieAsset = "success_check.json",
                                         value = "${dashboardState.punctualityRate.toInt()}%",
                                         label = if (lang == "en") "Attendance" else "Asistencia",
                                         sublabel = if (lang == "en") "Today" else "Hoy",
@@ -330,38 +330,6 @@ fun DashboardScreen(navController: NavController, viewModel: BioSecureViewModel?
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             WeeklyChartCard(dashboardState.weeklyData)
-                        }
-
-                        item {
-                            Spacer(modifier = Modifier.height(20.dp))
-                            Text(
-                                text = if (lang == "en") "AI Analysis" else "Análisis IA",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                                ),
-                                shape = RoundedCornerShape(16.dp),
-                                onClick = { viewModel?.getAiAnalysis() }
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text("✨", fontSize = 24.sp)
-                                    Spacer(Modifier.width(12.dp))
-                                    Text(
-                                        text = aiAnalysis ?: if (lang == "en") "Tap to generate an intelligent analysis for today." else "Toca para generar un análisis inteligente de hoy.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
                         }
 
                         item {
@@ -637,9 +605,9 @@ fun DashboardHeader(userName: String, photoUrl: String? = null) {
             Column {
                 Text(
                     text = "ADMIN PORTAL",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(

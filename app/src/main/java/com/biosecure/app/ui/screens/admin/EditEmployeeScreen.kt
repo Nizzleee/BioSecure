@@ -1,75 +1,101 @@
 package com.biosecure.app.ui.screens.admin
 
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.biosecure.app.data.network.DjangoEmployee
-import com.biosecure.app.data.network.RetrofitInstance
+import coil.compose.rememberAsyncImagePainter
+import com.biosecure.app.data.model.User
 import com.biosecure.app.ui.theme.White
 import com.biosecure.app.ui.viewmodel.BioSecureViewModel
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditEmployeeScreen(
     navController: NavController,
-    userId: Int,
+    userId: String,
     viewModel: BioSecureViewModel? = null
 ) {
-    val isDarkTheme = isSystemInDarkTheme()
-    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    val users by (viewModel?.users ?: MutableStateFlow(emptyList<User>())).collectAsState()
+    val isSaving by (viewModel?.isLoading ?: MutableStateFlow(false)).collectAsState()
+    val lastUpdatedUserId by (viewModel?.lastUpdatedUserId ?: MutableStateFlow<String?>(null)).collectAsState()
 
     var firstName by remember { mutableStateOf("") }
     var lastName by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
+    var cargo by remember { mutableStateOf("") }
     var department by remember { mutableStateOf("") }
+    var photoUrl by remember { mutableStateOf("") }
+    var isInitialized by remember { mutableStateOf(false) }
 
-    var isLoading by remember { mutableStateOf(true) }
-    var isSaving by remember { mutableStateOf(false) }
+    val photoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            photoUrl = it.toString()
+            viewModel?.updateUserPhoto(userId, it.toString())
+        }
+    }
 
-    // Cargar datos actuales del empleado al entrar a la pantalla
-    LaunchedEffect(userId) {
-        try {
-            val all = RetrofitInstance.api.getDjangoEmployees()
-            val emp = all.find { it.id == userId }
-            if (emp != null) {
-                firstName = emp.first_name
-                lastName = emp.last_name
-                email = emp.email
-                department = emp.department
+    LaunchedEffect(users, userId) {
+        if (!isInitialized && users.isNotEmpty()) {
+            val user = users.find { it.uid == userId }
+            if (user != null) {
+                firstName = user.firstName
+                lastName = user.lastName
+                email = user.email
+                cargo = user.cargo
+                department = user.department
+                photoUrl = user.image
+                isInitialized = true
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        } finally {
-            isLoading = false
+        }
+    }
+
+    LaunchedEffect(lastUpdatedUserId) {
+        if (lastUpdatedUserId == userId) {
+            viewModel?.clearLastUpdatedUserId()
+            navController.navigateUp()
         }
     }
 
     val isFormValid = firstName.isNotBlank() && lastName.isNotBlank() && email.isNotBlank()
 
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = if (isDarkTheme) Color.White else Color.Black,
-        unfocusedTextColor = if (isDarkTheme) Color.White else Color.Black,
-        focusedBorderColor = Color(0xFF00B4A6),
-        unfocusedBorderColor = Color(0xFF00B4A6),
-        focusedContainerColor = if (isDarkTheme) Color(0xFF2A2A2A) else Color.White,
-        unfocusedContainerColor = if (isDarkTheme) Color(0xFF2A2A2A) else Color.White,
-        focusedLabelColor = Color(0xFF00B4A6),
-        unfocusedLabelColor = if (isDarkTheme) Color(0xFFCCCCCC) else Color.Gray,
-        cursorColor = Color(0xFF00B4A6)
+        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        focusedLabelColor = MaterialTheme.colorScheme.primary,
+        unfocusedLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+        cursorColor = MaterialTheme.colorScheme.primary,
+        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
     )
 
     Scaffold(
@@ -91,7 +117,7 @@ fun EditEmployeeScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
                     navigationIconContentColor = MaterialTheme.colorScheme.onBackground
@@ -100,119 +126,146 @@ fun EditEmployeeScreen(
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { padding ->
-        if (isLoading) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.height(16.dp))
+
             Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier
+                    .size(120.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primaryContainer)
+                    .clickable { photoLauncher.launch("image/*") },
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = Color(0xFF00B4A6))
-            }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 24.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Datos del empleado",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-
-                OutlinedTextField(
-                    value = firstName,
-                    onValueChange = { firstName = it },
-                    label = { Text("Nombre") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = fieldColors,
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = lastName,
-                    onValueChange = { lastName = it },
-                    label = { Text("Apellido") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = fieldColors,
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it },
-                    label = { Text("Email") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = fieldColors,
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = department,
-                    onValueChange = { department = it },
-                    label = { Text("Departamento") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = fieldColors,
-                    singleLine = true
-                )
-
-                Button(
-                    onClick = {
-                        scope.launch {
-                            isSaving = true
-                            try {
-                                RetrofitInstance.api.updateDjangoEmployee(
-                                    id = userId,
-                                    employee = DjangoEmployee(
-                                        id = userId,
-                                        first_name = firstName.trim(),
-                                        last_name = lastName.trim(),
-                                        email = email.trim(),
-                                        department = department.trim()
-                                    )
-                                )
-                                snackbarHostState.showSnackbar("Empleado actualizado correctamente")
-                                navController.navigateUp()
-                            } catch (e: Exception) {
-                                snackbarHostState.showSnackbar("Error al guardar: ${e.message}")
-                            } finally {
-                                isSaving = false
-                            }
-                        }
-                    },
-                    enabled = isFormValid && !isSaving,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                if (photoUrl.isNotEmpty()) {
+                    Image(
+                        painter = rememberAsyncImagePainter(photoUrl),
+                        contentDescription = "Foto del empleado",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
                     )
-                ) {
-                    if (isSaving) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = White,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text(
-                            text = "Guardar cambios",
-                            color = White,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                } else {
+                    Text(text = "👤", fontSize = 56.sp)
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(36.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .padding(8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CameraAlt,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Datos del empleado",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.align(Alignment.Start)
+            )
+
+            OutlinedTextField(
+                value = firstName,
+                onValueChange = { firstName = it },
+                label = { Text("Nombre") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = fieldColors,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = lastName,
+                onValueChange = { lastName = it },
+                label = { Text("Apellido") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = fieldColors,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = fieldColors,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = cargo,
+                onValueChange = { cargo = it },
+                label = { Text("Cargo") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = fieldColors,
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = department,
+                onValueChange = { department = it },
+                label = { Text("Departamento") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = fieldColors,
+                singleLine = true
+            )
+
+            Button(
+                onClick = {
+                    viewModel?.updateEmployee(
+                        userId,
+                        firstName.trim(),
+                        lastName.trim(),
+                        email.trim(),
+                        cargo.trim(),
+                        department.trim()
+                    )
+                },
+                enabled = isFormValid && !isSaving,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    disabledContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                )
+            ) {
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        color = White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = "Guardar cambios",
+                        color = White,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

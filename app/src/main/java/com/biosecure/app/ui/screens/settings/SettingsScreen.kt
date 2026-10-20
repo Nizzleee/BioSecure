@@ -94,7 +94,7 @@ fun SettingsScreen(
                     modifier = Modifier
                         .size(90.dp)
                         .clip(CircleShape)
-                        .background(GreenDark),
+                        .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(text = if (isAdmin) "👨‍💼" else "👤", fontSize = 40.sp)
@@ -144,7 +144,11 @@ fun SettingsScreen(
                                 value = editNameValue,
                                 onValueChange = { editNameValue = it },
                                 label = { Text(if (language == "en") "Name" else "Nombre") },
-                                singleLine = true
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface
+                                )
                             )
                         },
                         confirmButton = {
@@ -177,37 +181,6 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = SuccessGreen,
                             fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(28.dp))
-
-                SectionLabel(text = labelBiometric)
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(2.dp)
-                ) {
-                    Column {
-                        BiometricItem(
-                            icon = "☝️",
-                            title = labelFingerprint,
-                            subtitle = if (isAdmin) "2 prints registered" else if (language == "en") "Tap to update" else "Toca para actualizar",
-                            isConfigured = true,
-                            onClick = if (!isAdmin) { { navController.navigate(Screen.EmployeeScan.route) } } else { {} }
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                        BiometricItem(
-                            icon = "😊",
-                            title = labelFacial,
-                            subtitle = if (isAdmin) "Active • Precise Mode" else if (language == "en") "Tap to update" else "Toca para actualizar",
-                            isConfigured = true,
-                            onClick = if (!isAdmin) { { navController.navigate(Screen.EmployeeScan.route) } } else { {} }
                         )
                     }
                 }
@@ -290,33 +263,6 @@ fun SettingsScreen(
                             }
                         }
                         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-
-                        if (isAdmin) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(text = "🏢", fontSize = 20.sp)
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = if (language == "en") "Enterprise Mode" else "Modo Empresa",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.weight(1f),
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Switch(
-                                    checked = true,
-                                    onCheckedChange = {},
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = White,
-                                        checkedTrackColor = Teal
-                                    )
-                                )
-                            }
-                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
-                        }
 
                         // Dark mode toggle (both admin and employee)
                         Row(
@@ -429,14 +375,14 @@ fun BiometricItem(icon: String, title: String, subtitle: String, isConfigured: B
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = Teal)
+            Text(text = subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
         }
         Text(text = if (isConfigured) "✅" else "❌", fontSize = 20.sp)
     }
 }
 
 @Composable
-fun SettingsItem(icon: String, title: String, onClick: () -> Unit = {}) {
+fun SettingsItem(icon: String, title: String, subtitle: String? = null, onClick: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -446,12 +392,20 @@ fun SettingsItem(icon: String, title: String, onClick: () -> Unit = {}) {
     ) {
         Text(text = icon, fontSize = 20.sp)
         Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.weight(1f),
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,

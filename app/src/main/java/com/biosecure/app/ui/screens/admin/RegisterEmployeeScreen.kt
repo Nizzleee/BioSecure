@@ -9,6 +9,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -68,13 +69,15 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = MaterialTheme.colorScheme.onSurface,
         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
-        focusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
         unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
         focusedLabelColor = MaterialTheme.colorScheme.primary,
-        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        cursorColor = MaterialTheme.colorScheme.primary
+        unfocusedLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+        cursorColor = MaterialTheme.colorScheme.primary,
+        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
     )
 
     Scaffold(
@@ -174,18 +177,47 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
                 singleLine = true
             )
 
+            // Sede selection header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Sede",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                TextButton(onClick = { navController.navigate(Screen.AdminSedes.route) }) {
+                    Text("Gestionar Sedes", color = MaterialTheme.colorScheme.primary)
+                }
+            }
+
             // Sede dropdown
-            if (sedes.isNotEmpty()) {
+            if (sedes.isEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = fieldShape,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
+                ) {
+                    Text(
+                        "No hay sedes registradas. Pulsa 'Gestionar' para añadir una.",
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            } else {
                 ExposedDropdownMenuBox(
                     expanded = sedeDropdownExpanded,
                     onExpandedChange = { sedeDropdownExpanded = it },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
-                        value = if (selectedSedeName.isEmpty()) "Sin sede asignada" else selectedSedeName,
+                        value = if (selectedSedeName.isEmpty()) "Seleccionar sede" else selectedSedeName,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Sede") },
                         trailingIcon = {
                             Icon(
                                 imageVector = Icons.Default.ArrowDropDown,
@@ -215,7 +247,7 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
                                     Column {
                                         Text(sede.nombre, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                                         Text(
-                                            "Lat: ${String.format("%.4f", sede.lat)}, Lng: ${String.format("%.4f", sede.lng)}",
+                                            "Arequipa, Peru",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -232,18 +264,47 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
                 }
             }
 
+            // Shift selection header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Turno",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                TextButton(onClick = { navController.navigate(Screen.AdminShiftSettings.route) }) {
+                    Text("Configurar Horarios", color = MaterialTheme.colorScheme.primary)
+                }
+            }
+
             // Shift dropdown
-            if (shifts.isNotEmpty()) {
+            if (shifts.isEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = fieldShape,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
+                ) {
+                    Text(
+                        "No hay turnos configurados. Pulsa 'Configurar' para añadir uno.",
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            } else {
                 ExposedDropdownMenuBox(
                     expanded = shiftDropdownExpanded,
                     onExpandedChange = { shiftDropdownExpanded = it },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedTextField(
-                        value = if (selectedShiftName.isEmpty()) "Sin turno asignado" else selectedShiftName,
+                        value = if (selectedShiftName.isEmpty()) "Seleccionar turno" else selectedShiftName,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Turno") },
                         trailingIcon = {
                             Icon(
                                 imageVector = Icons.Default.ArrowDropDown,

@@ -86,13 +86,13 @@ fun EmployeeListScreen(navController: NavController, viewModel: BioSecureViewMod
     if (showShiftDialog != null) {
         AlertDialog(
             onDismissRequest = { showShiftDialog = null },
-            title = { Text("Asignar Turno", fontWeight = FontWeight.Bold) },
+            title = { Text("Asignar Turno", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
             text = {
                 Column {
                     shifts.forEach { shift ->
                         ListItem(
-                            headlineContent = { Text(shift.name) },
-                            supportingContent = { Text("${shift.startTime} - ${shift.endTime}") },
+                            headlineContent = { Text(shift.name, color = MaterialTheme.colorScheme.onSurface) },
+                            supportingContent = { Text("${shift.startTime} - ${shift.endTime}", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                             modifier = Modifier.clickable {
                                 viewModel?.assignShiftToEmployee(showShiftDialog!!.uid, shift.id)
                                 showShiftDialog = null
@@ -114,7 +114,7 @@ fun EmployeeListScreen(navController: NavController, viewModel: BioSecureViewMod
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showShiftDialog = null }) { Text("Cerrar") }
+                TextButton(onClick = { showShiftDialog = null }) { Text("Cerrar", color = MaterialTheme.colorScheme.primary) }
             }
         )
     }
@@ -122,8 +122,8 @@ fun EmployeeListScreen(navController: NavController, viewModel: BioSecureViewMod
     showDeleteDialog?.let { user ->
         AlertDialog(
             onDismissRequest = { showDeleteDialog = null },
-            title = { Text("Eliminar empleado", fontWeight = FontWeight.Bold) },
-            text = { Text("¿Estás seguro de eliminar a ${user.firstName} ${user.lastName}?") },
+            title = { Text("Eliminar empleado", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
+            text = { Text("¿Estás seguro de eliminar a ${user.firstName} ${user.lastName}?", color = MaterialTheme.colorScheme.onSurfaceVariant) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel?.deleteFirestoreEmployee(user.uid)
@@ -133,7 +133,7 @@ fun EmployeeListScreen(navController: NavController, viewModel: BioSecureViewMod
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) { Text("Cancelar") }
+                TextButton(onClick = { showDeleteDialog = null }) { Text("Cancelar", color = MaterialTheme.colorScheme.primary) }
             }
         )
     }

@@ -34,7 +34,6 @@ class AttendanceRepository {
         val query = collection
             .whereEqualTo("companyId", companyId)
             .whereEqualTo("date", today)
-            .orderBy("checkIn", Query.Direction.DESCENDING)
 
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
@@ -59,7 +58,7 @@ class AttendanceRepository {
                 } catch (e: Exception) {
                     null
                 }
-            } ?: emptyList()
+            }?.sortedByDescending { it.checkIn } ?: emptyList()
 
             trySend(items)
         }
@@ -121,7 +120,6 @@ class AttendanceRepository {
         return try {
             db.collection("attendances")
                 .whereEqualTo("userId", uid)
-                .orderBy("checkIn", Query.Direction.DESCENDING)
                 .get()
                 .await()
                 .documents
@@ -147,7 +145,6 @@ class AttendanceRepository {
     fun observeAllAttendances(companyId: String): Flow<List<Attendance>> = callbackFlow {
         val query = collection
             .whereEqualTo("companyId", companyId)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
 
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
@@ -172,7 +169,7 @@ class AttendanceRepository {
                 } catch (e: Exception) {
                     null
                 }
-            } ?: emptyList()
+            }?.sortedWith(compareByDescending<Attendance> { dateSortKey(it.date) }.thenByDescending { it.checkIn }) ?: emptyList()
 
             trySend(items)
         }
@@ -183,7 +180,6 @@ class AttendanceRepository {
     fun observeUserAttendances(uid: String): Flow<List<Attendance>> = callbackFlow {
         val query = collection
             .whereEqualTo("userId", uid)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
 
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
@@ -208,12 +204,17 @@ class AttendanceRepository {
                 } catch (e: Exception) {
                     null
                 }
-            } ?: emptyList()
+            }?.sortedWith(compareByDescending<Attendance> { dateSortKey(it.date) }.thenByDescending { it.checkIn }) ?: emptyList()
 
             trySend(items)
         }
 
         awaitClose { registration.remove() }
+    }
+
+    private fun dateSortKey(date: String): String {
+        val parts = date.split("/")
+        return if (parts.size == 3) "${parts[2]}${parts[1].padStart(2, '0')}${parts[0].padStart(2, '0')}" else date
     }
 
     suspend fun getEmployees(): List<Map<String, Any>> {

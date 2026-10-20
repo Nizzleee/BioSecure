@@ -129,9 +129,6 @@ class BioSecureViewModel(
     private val _companyConfig = MutableStateFlow<Company?>(null)
     val companyConfig: StateFlow<Company?> = _companyConfig.asStateFlow()
 
-    private val _aiAnalysis = MutableStateFlow<String?>(null)
-    val aiAnalysis: StateFlow<String?> = _aiAnalysis.asStateFlow()
-
     private val _shifts = MutableStateFlow<List<com.biosecure.app.data.model.Shift>>(emptyList())
     val shifts: StateFlow<List<com.biosecure.app.data.model.Shift>> = _shifts.asStateFlow()
 
@@ -802,30 +799,6 @@ class BioSecureViewModel(
     }
 
     fun clearLastCreatedUser() { _lastCreatedUser.value = null }
-
-    fun getAiAnalysis() {
-        val companyId = _currentCompanyId.value
-        val history = _attendanceHistoryFlow.value
-        if (companyId.isEmpty() || history.isEmpty()) return
-
-        viewModelScope.launch {
-            _aiAnalysis.value = "Claude está analizando los patrones de asistencia..."
-
-            val historyMaps = history.take(20).map {
-                mapOf(
-                    "userName" to it.userName,
-                    "date" to it.date,
-                    "checkIn" to it.checkIn,
-                    "status" to it.status.name,
-                    "location" to it.location
-                )
-            }
-
-            functionsRepository.analyzeTrends(companyId, historyMaps)
-                .onSuccess { _aiAnalysis.value = it }
-                .onFailure { _aiAnalysis.value = "Error al obtener análisis: ${it.message}" }
-        }
-    }
 
     fun updateUserName(name: String) {
         val uid = _currentUserUid.value ?: return

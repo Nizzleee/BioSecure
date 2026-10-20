@@ -89,6 +89,7 @@ dependencies {
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     // Vico Charts
     implementation(libs.vico.compose)

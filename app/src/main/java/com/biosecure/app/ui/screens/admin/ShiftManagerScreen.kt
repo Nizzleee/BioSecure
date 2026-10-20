@@ -210,8 +210,8 @@ fun ShiftItemCard(shift: Shift, employeeCount: Int, onEdit: () -> Unit, onAssign
                     )
                 }
                 TextButton(onClick = onAssign) {
-                    Text("Asignar empleados")
-                    Icon(Icons.Default.ChevronRight, null)
+                    Text("Asignar empleados", color = MaterialTheme.colorScheme.primary)
+                    Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.primary)
                 }
             }
         }

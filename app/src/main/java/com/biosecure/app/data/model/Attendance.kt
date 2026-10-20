@@ -22,7 +22,8 @@ data class ConfirmationData(
     val checkIn: String,
     val date: String,
     val scanType: String,
-    val location: String = "Sede Central"
+    val location: String = "Sede Central",
+    val status: String = "TARDANZA"
 )
 
 enum class AttendanceStatus {

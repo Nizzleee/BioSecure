@@ -62,12 +62,17 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Gestión de Sedes", fontWeight = FontWeight.Bold) },
+                title = { Text("Gestión de Sedes", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
                 navigationIcon = {
                     IconButton(onClick = { navController.navigateUp() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver", tint = MaterialTheme.colorScheme.onSurface)
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onSurface
+                )
             )
         },
         bottomBar = {
@@ -225,8 +230,20 @@ fun SedeEditorBottomSheet(
     var nombre by remember { mutableStateOf(sede?.nombre ?: "") }
     var location by remember { mutableStateOf(LatLng(sede?.lat ?: -12.046, sede?.lng ?: -77.042)) }
     var radio by remember { mutableFloatStateOf(sede?.radioMetros?.toFloat() ?: 100f) }
-
     var searchQuery by remember { mutableStateOf("") }
+    var isSearching by remember { mutableStateOf(false) }
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+        focusedBorderColor = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        focusedLabelColor = MaterialTheme.colorScheme.primary,
+        unfocusedLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+        cursorColor = MaterialTheme.colorScheme.primary
+    )
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(location, 16f)
@@ -234,7 +251,8 @@ fun SedeEditorBottomSheet(
 
     LaunchedEffect(location) {
         cameraPositionState.animate(
-            CameraUpdateFactory.newLatLngZoom(location, 17f)
+            CameraUpdateFactory.newLatLngZoom(location, 17f),
+            1000
         )
     }
 
@@ -260,40 +278,55 @@ fun SedeEditorBottomSheet(
             OutlinedTextField(
                 value = nombre,
                 onValueChange = { nombre = it },
-                label = { Text("Nombre de la sede", color = Color.White.copy(alpha = 0.8f)) },
+                label = { Text("Nombre de la sede") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 singleLine = true,
-                textStyle = LocalTextStyle.current.copy(color = MaterialTheme.colorScheme.onSurface)
+                textStyle = LocalTextStyle.current.copy(color = MaterialTheme.colorScheme.onSurface),
+                colors = fieldColors
             )
 
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                label = { Text("Buscar dirección o zona", color = Color.White.copy(alpha = 0.8f)) },
+                label = { Text("Buscar dirección o zona") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
+                colors = fieldColors,
                 trailingIcon = {
-                    IconButton(onClick = {
-                        if (searchQuery.isNotBlank()) {
-                            scope.launch {
-                                try {
-                                    val geocoder = Geocoder(context, Locale.getDefault())
-                                    val addresses = withContext(Dispatchers.IO) {
-                                        geocoder.getFromLocationName(searchQuery, 1)
+                    IconButton(
+                        onClick = {
+                            if (searchQuery.isNotBlank()) {
+                                scope.launch {
+                                    isSearching = true
+                                    try {
+                                        val geocoder = Geocoder(context, Locale.getDefault())
+                                        val queryWithCity = if (searchQuery.contains("Arequipa", ignoreCase = true)) searchQuery else "$searchQuery, Arequipa, Peru"
+                                        val addresses = withContext(Dispatchers.IO) {
+                                            // Restringir búsqueda a las coordenadas de Arequipa, Perú
+                                            geocoder.getFromLocationName(queryWithCity, 1, -16.60, -71.70, -16.20, -71.30)
+                                        }
+                                        if (!addresses.isNullOrEmpty()) {
+                                            val addr = addresses[0]
+                                            location = LatLng(addr.latitude, addr.longitude)
+                                        }
+                                    } catch (_: Exception) {
+                                    } finally {
+                                        isSearching = false
                                     }
-                                    if (!addresses.isNullOrEmpty()) {
-                                        val addr = addresses[0]
-                                        location = LatLng(addr.latitude, addr.longitude)
-                                    }
-                                } catch (_: Exception) { }
+                                }
                             }
+                        },
+                        enabled = !isSearching
+                    ) {
+                        if (isSearching) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Search, contentDescription = "Buscar")
                         }
-                    }) {
-                        Icon(Icons.Default.Search, contentDescription = "Buscar")
                     }
                 },
-                placeholder = { Text("Ej: Av. Larco 123, Lima", color = Color.White.copy(alpha = 0.6f)) },
+                placeholder = { Text("Ej: Av. Larco 123, Lima") },
                 singleLine = true,
                 textStyle = LocalTextStyle.current.copy(color = MaterialTheme.colorScheme.onSurface)
             )
@@ -310,13 +343,21 @@ fun SedeEditorBottomSheet(
                 .clip(RoundedCornerShape(16.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
             ) {
+                val uiSettings = remember { MapUiSettings(zoomControlsEnabled = true) }
+                val properties = remember { MapProperties(mapType = MapType.NORMAL) }
+
                 GoogleMap(
                     modifier = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
                     onMapClick = { location = it },
-                    uiSettings = MapUiSettings(zoomControlsEnabled = true, myLocationButtonEnabled = true)
+                    uiSettings = uiSettings,
+                    properties = properties
                 ) {
-                    Marker(state = MarkerState(position = location), draggable = true, title = nombre.ifBlank { "Nueva Sede" })
+                    Marker(
+                        state = MarkerState(position = location),
+                        draggable = true,
+                        title = nombre.ifBlank { "Nueva Sede" }
+                    )
                     Circle(
                         center = location,
                         radius = radio.toDouble(),
@@ -324,6 +365,15 @@ fun SedeEditorBottomSheet(
                         strokeColor = MaterialTheme.colorScheme.primary,
                         strokeWidth = 3f
                     )
+                }
+
+                if (isSearching) {
+                    Box(
+                        modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
 

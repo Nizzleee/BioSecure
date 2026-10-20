@@ -58,18 +58,20 @@ fun LoginScreen(navController: NavController, viewModel: BioSecureViewModel? = n
         }
     }
 
-    val fieldBg = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.06f)
     val textFieldColors = TextFieldDefaults.colors(
-        focusedContainerColor = fieldBg,
-        unfocusedContainerColor = fieldBg,
         focusedTextColor = MaterialTheme.colorScheme.onSurface,
         unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
         focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-        unfocusedIndicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+        unfocusedIndicatorColor = Color.White.copy(alpha = 0.5f),
         focusedLabelColor = MaterialTheme.colorScheme.primary,
-        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        focusedPlaceholderColor = Color.White.copy(alpha = 0.6f),
-        unfocusedPlaceholderColor = Color.White.copy(alpha = 0.6f)
+        unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
+        cursorColor = MaterialTheme.colorScheme.primary,
+        focusedPlaceholderColor = Color.White.copy(alpha = 0.7f),
+        unfocusedPlaceholderColor = Color.White.copy(alpha = 0.7f),
+        focusedTrailingIconColor = MaterialTheme.colorScheme.primary,
+        unfocusedTrailingIconColor = Color.White.copy(alpha = 0.7f)
     )
 
     Box(
@@ -135,11 +137,12 @@ fun LoginScreen(navController: NavController, viewModel: BioSecureViewModel? = n
                         email = it
                         viewModel?.clearAuthError()
                     },
-                    label = { Text(if (lang == "en") "Email" else "Correo electrónico") },
+                    label = { Text(if (lang == "en") "Email" else "Correo electrónico", color = Color.White.copy(alpha = 0.8f)) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    textStyle = LocalTextStyle.current.copy(color = MaterialTheme.colorScheme.onSurface),
                     colors = textFieldColors
                 )
 
@@ -150,12 +153,13 @@ fun LoginScreen(navController: NavController, viewModel: BioSecureViewModel? = n
                         password = it
                         viewModel?.clearAuthError()
                     },
-                    label = { Text(if (lang == "en") "Password" else "Contraseña") },
+                    label = { Text(if (lang == "en") "Password" else "Contraseña", color = Color.White.copy(alpha = 0.8f)) },
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    textStyle = LocalTextStyle.current.copy(color = MaterialTheme.colorScheme.onSurface),
                     trailingIcon = {
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
                             Icon(
@@ -164,7 +168,7 @@ fun LoginScreen(navController: NavController, viewModel: BioSecureViewModel? = n
                                     (if (lang == "en") "Hide password" else "Ocultar contraseña")
                                 else
                                     (if (lang == "en") "Show password" else "Mostrar contraseña"),
-                                tint = Color(0xFF1ED9C5)
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     },

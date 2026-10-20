@@ -235,8 +235,9 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                     title = {
                         Text(
                             text = if (isAdmin) "ADMIN PORTAL" else if (lang == "en") "Check-in" else "Registro",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
                         )
                     },
                     navigationIcon = {

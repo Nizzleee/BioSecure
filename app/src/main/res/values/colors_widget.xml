@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="biosecure_green_dark">#0D3B35</color>
+    <color name="biosecure_teal">#00B4A6</color>
+    <color name="biosecure_teal_light">#1ED9C5</color>
+    <color name="biosecure_bg_dark">#1A2420</color>
+    <color name="biosecure_text_primary">#1A1A2E</color>
+</resources>
