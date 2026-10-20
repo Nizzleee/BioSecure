@@ -228,6 +228,17 @@ describe('BioSecure Firestore Security Rules - Casos adicionales de escalada y v
     );
   });
 
+  test('Gemelo positivo 1: Admin A puede cambiar el phone de employee_A', async () => {
+    const context = testEnv.authenticatedContext('admin_A');
+    const db = context.firestore();
+
+    await assertSucceeds(
+      db.collection('users').doc('employee_A').update({
+        phone: '999111222'
+      })
+    );
+  });
+
   test('Ataque 10: Usuario autenticado sin doc en users no puede leer companies ni attendances', async () => {
     const context = testEnv.authenticatedContext('ghost_uid');
     const db = context.firestore();
@@ -238,6 +249,15 @@ describe('BioSecure Firestore Security Rules - Casos adicionales de escalada y v
 
     await assertFails(
       db.collection('attendances').doc('employee_A_20260624').get()
+    );
+  });
+
+  test('Gemelo positivo 2: Usuario con doc válido lee companies/companyA', async () => {
+    const context = testEnv.authenticatedContext('employee_A');
+    const db = context.firestore();
+
+    await assertSucceeds(
+      db.collection('companies').doc('companyA').get()
     );
   });
 
