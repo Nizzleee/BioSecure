@@ -26,6 +26,13 @@ import com.biosecure.app.data.model.User
 import com.biosecure.app.ui.viewmodel.BioSecureViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 
+private val TIME_PATTERN = Regex("^([01]\\d|2[0-3]):[0-5]\\d$")
+
+private fun parseTimeToMinutes(value: String): Int? {
+    if (!TIME_PATTERN.matches(value)) return null
+    return value.substring(0, 2).toInt() * 60 + value.substring(3, 5).toInt()
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShiftManagerScreen(navController: NavController, viewModel: BioSecureViewModel? = null) {
@@ -230,6 +237,21 @@ fun AddShiftBottomSheet(
     var endTime by remember { mutableStateOf(shift?.endTime ?: "17:00") }
     var tolerance by remember { mutableStateOf(shift?.toleranceMin?.toString() ?: "5") }
 
+    val startMinutes = parseTimeToMinutes(startTime)
+    val endMinutes = parseTimeToMinutes(endTime)
+    val timeError = when {
+        startMinutes == null || endMinutes == null -> "Usa el formato HH:mm (00:00-23:59)"
+        endMinutes <= startMinutes -> "La hora de salida debe ser mayor que la entrada"
+        else -> null
+    }
+    val toleranceValue = tolerance.toIntOrNull()
+    val toleranceError = if (toleranceValue == null || toleranceValue !in 0..120) {
+        "Ingresa un número entero entre 0 y 120"
+    } else {
+        null
+    }
+    val canSave = name.isNotBlank() && timeError == null && toleranceError == null
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -288,6 +310,7 @@ fun AddShiftBottomSheet(
                     onValueChange = { startTime = it },
                     label = { Text("Hora Entrada") },
                     placeholder = { Text("HH:mm") },
+                    isError = timeError != null,
                     modifier = Modifier.weight(1f)
                 )
                 OutlinedTextField(
@@ -295,7 +318,16 @@ fun AddShiftBottomSheet(
                     onValueChange = { endTime = it },
                     label = { Text("Hora Salida") },
                     placeholder = { Text("HH:mm") },
+                    isError = timeError != null,
                     modifier = Modifier.weight(1f)
+                )
+            }
+
+            if (timeError != null) {
+                Text(
+                    text = timeError,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
                 )
             }
 
@@ -304,11 +336,26 @@ fun AddShiftBottomSheet(
                 onValueChange = { tolerance = it },
                 label = { Text("Tolerancia (minutos)") },
                 modifier = Modifier.fillMaxWidth(),
+                isError = toleranceError != null,
                 trailingIcon = { Text("min") }
             )
 
+            if (toleranceError != null) {
+                Text(
+                    text = toleranceError,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
             Button(
-                onClick = { onSave(name, startTime, endTime, tolerance.toIntOrNull() ?: 5) },
+                onClick = {
+                    val parsedTolerance = tolerance.toIntOrNull()
+                    if (canSave && parsedTolerance != null) {
+                        onSave(name, startTime, endTime, parsedTolerance)
+                    }
+                },
+                enabled = canSave,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),

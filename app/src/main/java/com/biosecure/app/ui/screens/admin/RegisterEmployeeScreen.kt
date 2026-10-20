@@ -63,7 +63,8 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
 
     val isFormValid = firstName.isNotBlank() && lastName.isNotBlank() &&
             email.isNotBlank() && password.length >= 6 &&
-            cargo.isNotBlank() && departamento.isNotBlank()
+            cargo.isNotBlank() && departamento.isNotBlank() &&
+            selectedSedeId.isNotBlank() && selectedShiftId.isNotBlank()
 
     val fieldShape = RoundedCornerShape(12.dp)
     val fieldColors = OutlinedTextFieldDefaults.colors(
@@ -247,7 +248,7 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
                                     Column {
                                         Text(sede.nombre, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                                         Text(
-                                            "Arequipa, Peru",
+                                            sede.nombre,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )

@@ -230,7 +230,9 @@ fun NavGraph(
             arguments = listOf(navArgument("uid") { type = NavType.StringType })
         ) { backStackEntry ->
             val uid = backStackEntry.arguments?.getString("uid") ?: ""
-            AdminEmployeeQRScreen(navController = navController, uid = uid)
+            AdminRouteGuard(viewModel = viewModel, navController = navController) {
+                AdminEmployeeQRScreen(navController = navController, uid = uid)
+            }
         }
         composable(Screen.AdminShiftSettings.route) {
             AdminRouteGuard(viewModel = viewModel, navController = navController) {

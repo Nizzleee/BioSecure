@@ -301,10 +301,8 @@ fun SedeEditorBottomSheet(
                                     isSearching = true
                                     try {
                                         val geocoder = Geocoder(context, Locale.getDefault())
-                                        val queryWithCity = if (searchQuery.contains("Arequipa", ignoreCase = true)) searchQuery else "$searchQuery, Arequipa, Peru"
                                         val addresses = withContext(Dispatchers.IO) {
-                                            // Restringir búsqueda a las coordenadas de Arequipa, Perú
-                                            geocoder.getFromLocationName(queryWithCity, 1, -16.60, -71.70, -16.20, -71.30)
+                                            geocoder.getFromLocationName(searchQuery, 1)
                                         }
                                         if (!addresses.isNullOrEmpty()) {
                                             val addr = addresses[0]

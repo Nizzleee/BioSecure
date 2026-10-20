@@ -242,6 +242,8 @@ private fun EditShiftDialog(
         is24Hour = true
     )
 
+    val timeOrderValid = (endState.hour * 60 + endState.minute) > (startState.hour * 60 + startState.minute)
+
     if (showStartPicker) {
         TimePickerModal(
             state = startState,
@@ -262,52 +264,62 @@ private fun EditShiftDialog(
         onDismissRequest = onDismiss,
         title = { Text("Editar turno: ${shift.name}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
         text = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { showStartPicker = true },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Inicio",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = formatTime(startState.hour, startState.minute),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    OutlinedButton(
+                        onClick = { showStartPicker = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Inicio",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = formatTime(startState.hour, startState.minute),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = { showEndPicker = true },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Fin",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = formatTime(endState.hour, endState.minute),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
-                OutlinedButton(
-                    onClick = { showEndPicker = true },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "Fin",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = formatTime(endState.hour, endState.minute),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                if (!timeOrderValid) {
+                    Text(
+                        text = "La hora de fin debe ser mayor que la hora de inicio.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         },
         confirmButton = {
             TextButton(
+                enabled = timeOrderValid,
                 onClick = {
                     onConfirm(
                         shift.copy(
@@ -337,6 +349,8 @@ private fun AddShiftDialog(
 
     val startState = rememberTimePickerState(initialHour = 8, initialMinute = 0, is24Hour = true)
     val endState = rememberTimePickerState(initialHour = 9, initialMinute = 0, is24Hour = true)
+
+    val timeOrderValid = (endState.hour * 60 + endState.minute) > (startState.hour * 60 + startState.minute)
 
     fun formatTime(hour: Int, minute: Int) = "%02d:%02d".format(hour, minute)
 
@@ -422,12 +436,21 @@ private fun AddShiftDialog(
                         }
                     }
                 }
+
+                if (!timeOrderValid) {
+                    Text(
+                        text = "La hora de fin debe ser mayor que la hora de inicio.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
+                enabled = shiftName.isNotBlank() && timeOrderValid,
                 onClick = {
-                    if (shiftName.isNotBlank()) {
+                    if (shiftName.isNotBlank() && timeOrderValid) {
                         onConfirm(
                             Shift(
                                 name = shiftName.trim(),

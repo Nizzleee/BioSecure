@@ -644,7 +644,8 @@ class BioSecureViewModel(
             userName = userName,
             checkIn = checkIn,
             date = date,
-            scanType = ScanType.QR.name
+            scanType = ScanType.QR.name,
+            status = AttendanceStatus.EXITOSO.name
         )
         _attendances.value = _attendances.value + attendance
         viewModelScope.launch {
