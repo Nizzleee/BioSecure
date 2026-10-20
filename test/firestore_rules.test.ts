@@ -48,8 +48,8 @@ beforeEach(async () => {
     });
 
     // Empresas A y B
-    await db.collection('companies').doc('companyA').set({ id: 'companyA', name: 'Empresa A', horaEntrada: '08:00', toleranciaMin: 15, timezone: 'America/Lima' });
-    await db.collection('companies').doc('companyB').set({ id: 'companyB', name: 'Empresa B', horaEntrada: '08:00', toleranciaMin: 15, timezone: 'America/Lima' });
+    await db.collection('companies').doc('companyA').set({ name: 'Empresa A', horaEntrada: '08:00', toleranciaMin: 15, timezone: 'America/Lima' });
+    await db.collection('companies').doc('companyB').set({ name: 'Empresa B', horaEntrada: '08:00', toleranciaMin: 15, timezone: 'America/Lima' });
 
     // Sede en Empresa A
     await db.collection('companies').doc('companyA').collection('sedes').doc('sede_1').set({
@@ -211,6 +211,123 @@ describe('BioSecure Firestore Security Rules - Tests Positivos y Operaciones Vá
 
     await assertSucceeds(
       db.collection('attendances').where('companyId', '==', 'companyA').get()
+    );
+  });
+});
+
+describe('BioSecure Firestore Security Rules - Casos adicionales de escalada y validación', () => {
+
+  test('Ataque 9: Admin A no puede cambiar el role de employee_A a admin', async () => {
+    const context = testEnv.authenticatedContext('admin_A');
+    const db = context.firestore();
+
+    await assertFails(
+      db.collection('users').doc('employee_A').update({
+        role: 'admin'
+      })
+    );
+  });
+
+  test('Ataque 10: Usuario autenticado sin doc en users no puede leer companies ni attendances', async () => {
+    const context = testEnv.authenticatedContext('ghost_uid');
+    const db = context.firestore();
+
+    await assertFails(
+      db.collection('companies').doc('companyA').get()
+    );
+
+    await assertFails(
+      db.collection('attendances').doc('employee_A_20260624').get()
+    );
+  });
+
+  test('Ataque 11: Empleado no puede cambiar su propio isActive', async () => {
+    const context = testEnv.authenticatedContext('employee_A');
+    const db = context.firestore();
+
+    await assertFails(
+      db.collection('users').doc('employee_A').update({
+        isActive: false
+      })
+    );
+  });
+
+  test('Validación de sede: radioMetros 10 y 600 fallan; 100 pasa', async () => {
+    const context = testEnv.authenticatedContext('admin_A');
+    const db = context.firestore();
+    const sedeBase = {
+      nombre: 'Sede Validada',
+      lat: -12.0463,
+      lng: -77.0427,
+      activa: true
+    };
+
+    await assertFails(
+      db.collection('companies').doc('companyA').collection('sedes').doc('sede_10').set({
+        ...sedeBase,
+        radioMetros: 10
+      })
+    );
+
+    await assertFails(
+      db.collection('companies').doc('companyA').collection('sedes').doc('sede_600').set({
+        ...sedeBase,
+        radioMetros: 600
+      })
+    );
+
+    await assertSucceeds(
+      db.collection('companies').doc('companyA').collection('sedes').doc('sede_100').set({
+        ...sedeBase,
+        radioMetros: 100
+      })
+    );
+  });
+
+  test('Ataque 12: Cliente no puede crear, actualizar ni borrar attendances e idempotency_keys', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await context.firestore().collection('idempotency_keys').doc('idem_1').set({
+        uid: 'admin_A',
+        response: { ok: true }
+      });
+    });
+
+    const context = testEnv.authenticatedContext('admin_A');
+    const db = context.firestore();
+
+    await assertFails(
+      db.collection('attendances').doc('nueva_asistencia').set({
+        userId: 'employee_A',
+        companyId: 'companyA',
+        status: 'PUNTUAL'
+      })
+    );
+
+    await assertFails(
+      db.collection('attendances').doc('employee_A_20260624').update({
+        status: 'TARDANZA'
+      })
+    );
+
+    await assertFails(
+      db.collection('attendances').doc('employee_A_20260624').delete()
+    );
+
+    await assertFails(
+      db.collection('idempotency_keys').doc('idem_nuevo').set({
+        uid: 'admin_A',
+        response: { ok: true }
+      })
+    );
+
+    await assertFails(
+      db.collection('idempotency_keys').doc('idem_1').update({
+        uid: 'employee_A'
+      })
+    );
+
+    await assertFails(
+      db.collection('idempotency_keys').doc('idem_1').delete()
     );
   });
 });
