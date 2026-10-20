@@ -355,7 +355,7 @@ SedesScreen → SedeEditorSheet
   → Slider 20m–500m → Circle de geocerca visual
   → Guardar → Firestore sedes/{id}
   
-Maps API key: AIzaSyDZVVrZS3V-m9I6zHlEmubUSfm_EqxdvCw (en AndroidManifest.xml)
+Maps API key: [ROTADA - ver Google Cloud Console] (en AndroidManifest.xml)
 PENDIENTE: verificar que esta clave tenga "Maps SDK for Android" habilitado
            en Google Cloud Console → APIs & Services → Credentials
 ```
@@ -490,7 +490,7 @@ android {
 ### #2 — Verificar Maps API key (ALTA — SedesScreen puede mostrar mapa en blanco)
 
 1. Ir a [Google Cloud Console](https://console.cloud.google.com/) → el proyecto del mismo Firebase
-2. APIs & Services → Credentials → buscar clave `AIzaSyDZVVrZS3V-m9I6zHlEmubUSfm_EqxdvCw`
+2. APIs & Services → Credentials → buscar clave `[ROTADA - ver Google Cloud Console]`
 3. Verificar que "Maps SDK for Android" esté habilitado para esa clave
 4. Si el mapa muestra tiles grises o logcat muestra `AuthFailure` → activar la API
 
