@@ -1,5 +1,5 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { defineInt, defineFloat } from "firebase-functions/params";
+import { defineInt } from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import { calculateHaversineDistance } from "./logic/haversine";
 import { formatServerTime, hhMmToMinutes } from "./logic/timeUtils";
@@ -9,7 +9,7 @@ admin.initializeApp();
 const db = admin.firestore();
 
 // --- PARAMETRIZACIÓN CON DEFINES DE FIREBASE FUNCTIONS PARAMS (Sin literales) ---
-const paramMaxAccuracyMeters = defineFloat("MAX_ACCURACY_METERS", { default: 50.0 });
+const paramMaxAccuracyMeters = defineInt("MAX_ACCURACY_METERS", { default: 50 });
 const paramEarlyCheckinMinutes = defineInt("EARLY_CHECKIN_MINUTES", { default: 60 });
 const paramMinMinutesBeforeCheckout = defineInt("MIN_MINUTES_BEFORE_CHECKOUT", { default: 5 });
 const paramMaxCheckoutOvertimeMinutes = defineInt("MAX_CHECKOUT_OVERTIME_MINUTES", { default: 120 });
@@ -34,33 +34,33 @@ export const registerAttendance = onCall(
     // 1. Autenticación del Solicitante
     const auth = request.auth;
     if (!auth || !auth.uid) {
-      throw new HttpsError("unauthenticated", "Usuario no autenticado");
+      throw new HttpsError("unauthenticated", "Usuario no autenticado", { code: "UNAUTHENTICATED" });
     }
     const callerUid = auth.uid;
 
     const data = request.data as RegisterAttendancePayload;
     if (!data) {
-      throw new HttpsError("invalid-argument", "Payload ausente");
+      throw new HttpsError("invalid-argument", "Payload ausente", { code: "INVALID_ARGUMENT" });
     }
 
     // 2. Validación de Coordenadas y Accuracy
     if (!Number.isFinite(data.lat) || data.lat < -90.0 || data.lat > 90.0 ||
         !Number.isFinite(data.lng) || data.lng < -180.0 || data.lng > 180.0) {
-      throw new HttpsError("invalid-argument", "Coordenadas lat/lng fuera de rango válido");
+      throw new HttpsError("invalid-argument", "Coordenadas lat/lng fuera de rango válido", { code: "INVALID_COORDINATES" });
     }
 
     if (!Number.isFinite(data.accuracy) || data.accuracy < 0) {
-      throw new HttpsError("invalid-argument", "Precisión de GPS inválida");
+      throw new HttpsError("invalid-argument", "Precisión de GPS inválida", { code: "INVALID_ACCURACY" });
     }
 
     const maxAccuracy = paramMaxAccuracyMeters.value();
     if (data.accuracy > maxAccuracy) {
-      throw new HttpsError("invalid-argument", `Accuracy excesivamente alta (${data.accuracy.toFixed(1)}m > ${maxAccuracy}m)`);
+      throw new HttpsError("invalid-argument", `Accuracy excesivamente alta (${data.accuracy.toFixed(1)}m > ${maxAccuracy}m)`, { code: "ACCURACY_TOO_HIGH" });
     }
 
     const requestId = (data.requestId || "").trim();
     if (!requestId) {
-      throw new HttpsError("invalid-argument", "requestId es obligatorio");
+      throw new HttpsError("invalid-argument", "requestId es obligatorio", { code: "INVALID_REQUEST_ID" });
     }
 
     // 3. Validación Estricta de qrToken (si está presente)
@@ -68,7 +68,7 @@ export const registerAttendance = onCall(
     if (qrToken.length > 0) {
       const qrRegex = /^[A-Za-z0-9]{20,128}$/;
       if (!qrRegex.test(qrToken)) {
-        throw new HttpsError("invalid-argument", "INVALID_QR_TOKEN: Formato de token QR inválido");
+        throw new HttpsError("invalid-argument", "INVALID_QR_TOKEN: Formato de token QR inválido", { code: "INVALID_QR_TOKEN" });
       }
     }
 
@@ -86,7 +86,7 @@ export const registerAttendance = onCall(
       if (idempotencyDoc.exists) {
         const idData = idempotencyDoc.data();
         if (idData?.uid !== callerUid) {
-          throw new HttpsError("permission-denied", "requestId ya fue utilizado por otro usuario");
+          throw new HttpsError("permission-denied", "requestId ya fue utilizado por otro usuario", { code: "REQUEST_ID_USED" });
         }
         return idData?.response;
       }
@@ -95,7 +95,7 @@ export const registerAttendance = onCall(
       const callerRef = db.collection("users").doc(callerUid);
       const callerDoc = await transaction.get(callerRef);
       if (!callerDoc.exists) {
-        throw new HttpsError("permission-denied", "Perfil del solicitante no existe");
+        throw new HttpsError("permission-denied", "Perfil del solicitante no existe", { code: "CALLER_NOT_FOUND" });
       }
       const callerData = callerDoc.data() || {};
       const callerRole = callerData.role || "employee";
@@ -103,7 +103,7 @@ export const registerAttendance = onCall(
 
       // 1.3 Regla Estricta: Administrador NUNCA puede marcar asistencia para sí mismo
       if (effectiveUid === callerUid && callerRole === "admin") {
-        throw new HttpsError("permission-denied", "ADMIN_CANNOT_MARK_SELF: Los administradores no marcan asistencia");
+        throw new HttpsError("permission-denied", "ADMIN_CANNOT_MARK_SELF: Los administradores no marcan asistencia", { code: "ADMIN_CANNOT_MARK_SELF" });
       }
 
       // 1.4 Lectura Perfil Empleado Objetivo (effectiveUid)
@@ -112,23 +112,23 @@ export const registerAttendance = onCall(
         const targetRef = db.collection("users").doc(effectiveUid);
         const targetDoc = await transaction.get(targetRef);
         if (!targetDoc.exists) {
-          throw new HttpsError("not-found", "El perfil del empleado objetivo no existe");
+          throw new HttpsError("not-found", "El perfil del empleado objetivo no existe", { code: "TARGET_NOT_FOUND" });
         }
         targetData = targetDoc.data() || {};
       }
 
       // Regla Estricta: El objetivo DEBE ser ROL EMPLEADO
       if (targetData.role !== "employee") {
-        throw new HttpsError("permission-denied", "TARGET_NOT_EMPLOYEE: El objetivo debe ser un empleado");
+        throw new HttpsError("permission-denied", "TARGET_NOT_EMPLOYEE: El objetivo debe ser un empleado", { code: "TARGET_NOT_EMPLOYEE" });
       }
 
       if (targetData.isActive === false) {
-        throw new HttpsError("failed-precondition", "El empleado se encuentra inactivo");
+        throw new HttpsError("failed-precondition", "El empleado se encuentra inactivo", { code: "EMPLOYEE_INACTIVE" });
       }
 
       const companyId = targetData.companyId || "";
       if (!companyId) {
-        throw new HttpsError("failed-precondition", "El empleado no tiene empresa asignada");
+        throw new HttpsError("failed-precondition", "El empleado no tiene empresa asignada", { code: "NO_COMPANY_ASSIGNED" });
       }
 
       // 1.5 Autorización y Tipo de Marcación
@@ -136,15 +136,15 @@ export const registerAttendance = onCall(
 
       if (effectiveUid === callerUid) {
         if (data.tipo === "QR") {
-          throw new HttpsError("invalid-argument", "Tipo QR no permitido para automarcación");
+          throw new HttpsError("invalid-argument", "Tipo QR no permitido para automarcación", { code: "INVALID_SELF_CHECKIN_TYPE" });
         }
         determinedType = (data.tipo === "FACIAL") ? "FACIAL" : "HUELLA";
       } else {
         if (callerRole !== "admin") {
-          throw new HttpsError("permission-denied", "Solo un administrador puede escanear a un empleado");
+          throw new HttpsError("permission-denied", "Solo un administrador puede escanear a un empleado", { code: "ADMIN_ONLY" });
         }
         if (callerCompanyId !== companyId) {
-          throw new HttpsError("permission-denied", "No tienes permisos sobre empleados de otra empresa");
+          throw new HttpsError("permission-denied", "No tienes permisos sobre empleados de otra empresa", { code: "COMPANY_MISMATCH" });
         }
         determinedType = "QR";
       }
@@ -153,7 +153,7 @@ export const registerAttendance = onCall(
       const companyRef = db.collection("companies").doc(companyId);
       const companyDoc = await transaction.get(companyRef);
       if (!companyDoc.exists) {
-        throw new HttpsError("failed-precondition", "La empresa asignada no existe");
+        throw new HttpsError("failed-precondition", "La empresa asignada no existe", { code: "COMPANY_NOT_FOUND" });
       }
       const companyData = companyDoc.data() || {};
       const timezone = companyData.timezone || "America/Lima";
@@ -161,56 +161,77 @@ export const registerAttendance = onCall(
       // 1.7 Lectura Sede Asignada y Validación Estricta
       const sedeId = targetData.sedeId || "";
       if (!sedeId) {
-        throw new HttpsError("failed-precondition", "FAILED_PRECONDITION: El empleado no tiene sede asignada");
+        throw new HttpsError("failed-precondition", "FAILED_PRECONDITION: El empleado no tiene sede asignada", { code: "NO_SEDE_ASSIGNED" });
       }
       const sedeRef = db.collection("companies").doc(companyId).collection("sedes").doc(sedeId);
       const sedeDoc = await transaction.get(sedeRef);
       if (!sedeDoc.exists) {
-        throw new HttpsError("failed-precondition", "INVALID_SEDE_CONFIG: La sede asignada no existe");
+        throw new HttpsError("failed-precondition", "INVALID_SEDE_CONFIG: La sede asignada no existe", { code: "INVALID_SEDE_CONFIG" });
       }
       const sedeData = sedeDoc.data() || {};
       if (sedeData.activa === false) {
-        throw new HttpsError("failed-precondition", "INVALID_SEDE_CONFIG: La sede asignada se encuentra inactiva");
+        throw new HttpsError("failed-precondition", "INVALID_SEDE_CONFIG: La sede asignada se encuentra inactiva", { code: "INVALID_SEDE_CONFIG" });
       }
 
-      const sedeLat = Number(sedeData.lat);
-      const sedeLng = Number(sedeData.lng);
-      const rawRadio = Number(sedeData.radioMetros);
-
-      if (!Number.isFinite(sedeLat) || !Number.isFinite(sedeLng) || !Number.isFinite(rawRadio)) {
-        throw new HttpsError("failed-precondition", "INVALID_SEDE_CONFIG: Configuración geográfica de la sede corrupta");
+      if (typeof sedeData.lat !== "number" || !Number.isFinite(sedeData.lat) ||
+          typeof sedeData.lng !== "number" || !Number.isFinite(sedeData.lng) ||
+          typeof sedeData.radioMetros !== "number" || !Number.isFinite(sedeData.radioMetros)) {
+        throw new HttpsError("failed-precondition", "INVALID_SEDE_CONFIG: Configuración geográfica de la sede corrupta", { code: "INVALID_SEDE_CONFIG" });
       }
+
+      const sedeLat = sedeData.lat;
+      const sedeLng = sedeData.lng;
+      const rawRadio = sedeData.radioMetros;
 
       if (rawRadio < 20 || rawRadio > 500) {
-        throw new HttpsError("failed-precondition", "INVALID_SEDE_CONFIG: radioMetros fuera de rango permitido (20-500m)");
+        throw new HttpsError("failed-precondition", "INVALID_SEDE_CONFIG: radioMetros fuera de rango permitido (20-500m)", { code: "INVALID_SEDE_CONFIG" });
       }
       const radioMetros = rawRadio;
 
       // 1.8 Lectura Estricta de Turno (SIN FALLBACKS a 08:00-17:00 ni a horaEntrada de empresa)
       const shiftId = targetData.shiftId || "";
       if (!shiftId) {
-        throw new HttpsError("failed-precondition", "NO_SHIFT_ASSIGNED: El empleado no tiene turno asignado");
+        throw new HttpsError("failed-precondition", "NO_SHIFT_ASSIGNED: El empleado no tiene turno asignado", { code: "NO_SHIFT_ASSIGNED" });
       }
 
       const shiftRef = db.collection("companies").doc(companyId).collection("shifts").doc(shiftId);
       const shiftDoc = await transaction.get(shiftRef);
       if (!shiftDoc.exists) {
-        throw new HttpsError("failed-precondition", "NO_SHIFT_ASSIGNED: El documento del turno asignado no existe");
+        throw new HttpsError("failed-precondition", "NO_SHIFT_ASSIGNED: El documento del turno asignado no existe", { code: "NO_SHIFT_ASSIGNED" });
       }
 
       const sData = shiftDoc.data() || {};
       const shiftStartTime = sData.startTime;
       const shiftEndTime = sData.endTime;
-      const shiftTolerance = Number(sData.toleranceMin);
+      const shiftTolerance = sData.toleranceMin;
 
-      if (typeof shiftStartTime !== "string" || typeof shiftEndTime !== "string" || !Number.isFinite(shiftTolerance)) {
-        throw new HttpsError("failed-precondition", "INVALID_SHIFT_CONFIG: Configuración de turno corrupta");
+      if (typeof shiftStartTime !== "string" || typeof shiftEndTime !== "string" ||
+          typeof shiftTolerance !== "number" || !Number.isFinite(shiftTolerance)) {
+        throw new HttpsError("failed-precondition", "INVALID_SHIFT_CONFIG: Configuración de turno corrupta", { code: "INVALID_SHIFT_CONFIG" });
+      }
+
+      const timeRegex = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+      if (!timeRegex.test(shiftStartTime.trim()) || !timeRegex.test(shiftEndTime.trim())) {
+        throw new HttpsError("failed-precondition", "INVALID_SHIFT_CONFIG: Configuración de horario de turno con formato inválido (esperado HH:mm)", { code: "INVALID_SHIFT_CONFIG" });
+      }
+
+      let startMinutes: number;
+      let endMinutes: number;
+      try {
+        startMinutes = hhMmToMinutes(shiftStartTime);
+        endMinutes = hhMmToMinutes(shiftEndTime);
+      } catch (e) {
+        throw new HttpsError("failed-precondition", "INVALID_SHIFT_CONFIG: Configuración de horario de turno corrupta", { code: "INVALID_SHIFT_CONFIG" });
+      }
+
+      if (endMinutes <= startMinutes) {
+        throw new HttpsError("failed-precondition", "UNSUPPORTED_SHIFT: Turnos nocturnos o de duración cero no están soportados", { code: "UNSUPPORTED_SHIFT" });
       }
 
       const shiftConfig: ShiftConfig = {
         startTime: shiftStartTime,
         endTime: shiftEndTime,
-        toleranceMin: shiftTolerance // Acepta 0 estrictamente
+        toleranceMin: shiftTolerance
       };
 
       // 1.9 Fecha y Hora Servidor
@@ -218,7 +239,11 @@ export const registerAttendance = onCall(
       try {
         formattedTime = formatServerTime(new Date(), timezone);
       } catch (e: any) {
-        throw new HttpsError("failed-precondition", e.message || "INVALID_TIMEZONE");
+        const msg = String(e?.message || "");
+        if (msg.includes("INVALID_TIMEZONE")) {
+          throw new HttpsError("failed-precondition", "INVALID_TIMEZONE: Zona horaria inválida en la configuración de la empresa", { code: "INVALID_TIMEZONE" });
+        }
+        throw new HttpsError("internal", "Error interno al procesar hora del servidor");
       }
 
       const dateYyyyMmDd = formattedTime.dateYyyyMmDd;
@@ -235,7 +260,8 @@ export const registerAttendance = onCall(
       if (distance > radioMetros) {
         throw new HttpsError(
           "failed-precondition",
-          `OUT_OF_RANGE_GEOFENCE: Distancia ${distance.toFixed(1)}m supera el radio de la sede (${radioMetros}m)`
+          `OUT_OF_RANGE_GEOFENCE: Distancia ${distance.toFixed(1)}m supera el radio de la sede (${radioMetros}m)`,
+          { code: "OUT_OF_RANGE_GEOFENCE" }
         );
       }
 
@@ -247,7 +273,14 @@ export const registerAttendance = onCall(
         try {
           finalStatus = calculateAttendanceStatus(currentHhMm, shiftConfig, paramEarlyCheckinMinutes.value());
         } catch (e: any) {
-          throw new HttpsError("failed-precondition", e.message || "OUT_OF_WINDOW");
+          const msg = String(e?.message || "");
+          if (msg.startsWith("UNSUPPORTED_SHIFT")) {
+            throw new HttpsError("failed-precondition", "UNSUPPORTED_SHIFT: Turnos nocturnos o de duración cero no están soportados", { code: "UNSUPPORTED_SHIFT" });
+          } else if (msg.startsWith("OUT_OF_WINDOW")) {
+            throw new HttpsError("failed-precondition", "OUT_OF_SCHEDULE_WINDOW: Marcación fuera de la ventana horaria del turno", { code: "OUT_OF_SCHEDULE_WINDOW" });
+          } else {
+            throw new HttpsError("internal", "Error interno al calcular estado de asistencia");
+          }
         }
 
         const newAttendanceData = {
@@ -299,14 +332,14 @@ export const registerAttendance = onCall(
         // --- CASO CHECK-OUT ---
         const existingData = attendanceDoc.data() || {};
         if (existingData.checkOut && existingData.checkOut !== "") {
-          throw new HttpsError("failed-precondition", "ALREADY_COMPLETE: Entrada y salida ya registradas para hoy");
+          throw new HttpsError("failed-precondition", "ALREADY_COMPLETE: Entrada y salida ya registradas para hoy", { code: "ALREADY_COMPLETE" });
         }
 
         let checkInMinutes: number;
         try {
           checkInMinutes = hhMmToMinutes(existingData.checkIn);
         } catch (e) {
-          throw new HttpsError("failed-precondition", "CORRUPT_CHECKIN_DATA: Formato de hora en checkIn corrupto");
+          throw new HttpsError("failed-precondition", "CORRUPT_CHECKIN_DATA: Formato de hora en checkIn corrupto", { code: "CORRUPT_CHECKIN_DATA" });
         }
 
         const currentMinutes = formattedTime.minutesFromMidnight;
@@ -315,7 +348,8 @@ export const registerAttendance = onCall(
         if (currentMinutes < minCheckoutTime) {
           throw new HttpsError(
             "failed-precondition",
-            `TOO_SOON: Deben transcurrir al menos ${paramMinMinutesBeforeCheckout.value()} minutos desde el checkIn para registrar salida`
+            `TOO_SOON: Deben transcurrir al menos ${paramMinMinutesBeforeCheckout.value()} minutos desde el checkIn para registrar salida`,
+            { code: "TOO_SOON" }
           );
         }
 
@@ -324,14 +358,15 @@ export const registerAttendance = onCall(
         try {
           shiftEndMinutes = hhMmToMinutes(shiftConfig.endTime);
         } catch (e) {
-          throw new HttpsError("failed-precondition", "CORRUPT_CHECKIN_DATA: Configuración del fin de turno corrupta");
+          throw new HttpsError("failed-precondition", "INVALID_SHIFT_CONFIG: Configuración del fin de turno corrupta", { code: "INVALID_SHIFT_CONFIG" });
         }
 
         const maxCheckoutAllowedMinutes = shiftEndMinutes + paramMaxCheckoutOvertimeMinutes.value();
         if (currentMinutes > maxCheckoutAllowedMinutes) {
           throw new HttpsError(
             "failed-precondition",
-            `OUT_OF_WINDOW: Hora de salida excede el tiempo límite permitido de horas extra`
+            `OUT_OF_WINDOW: Hora de salida excede el tiempo límite permitido de horas extra`,
+            { code: "OUT_OF_WINDOW" }
           );
         }
 
@@ -381,8 +416,8 @@ export const registerManualAttendance = onCall(
   async (request) => {
     const auth = request.auth;
     if (!auth || !auth.uid) {
-      throw new HttpsError("unauthenticated", "Usuario no autenticado");
+      throw new HttpsError("unauthenticated", "Usuario no autenticado", { code: "UNAUTHENTICATED" });
     }
-    throw new HttpsError("unimplemented", "registerManualAttendance aún no está implementada");
+    throw new HttpsError("unimplemented", "registerManualAttendance aún no está implementada", { code: "UNIMPLEMENTED" });
   }
 );
