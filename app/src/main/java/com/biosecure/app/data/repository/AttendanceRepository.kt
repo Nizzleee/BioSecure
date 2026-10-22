@@ -67,36 +67,9 @@ class AttendanceRepository {
     }
 
     suspend fun saveAttendance(attendance: Attendance): Result<String> {
-        return try {
-            val data = hashMapOf(
-                "userId" to attendance.userId,
-                "companyId" to attendance.companyId,
-                "sedeId" to attendance.sedeId,
-                "userName" to attendance.userName,
-                "date" to attendance.date,
-                "checkIn" to attendance.checkIn,
-                "status" to attendance.status.name,
-                "type" to attendance.type.name,
-                "location" to attendance.location,
-                "timestamp" to com.google.firebase.Timestamp.now()
-            )
-            val ref = collection.add(data).await()
-
-            try {
-                val notif = hashMapOf(
-                    "type" to "attendance",
-                    "userName" to attendance.userName,
-                    "checkIn" to attendance.checkIn,
-                    "timestamp" to Timestamp.now(),
-                    "read" to false
-                )
-                db.collection("notifications").add(notif).await()
-            } catch (_: Exception) {}
-
-            Result.success(ref.id)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        return Result.failure(
+            IllegalStateException("El registro manual está deshabilitado hasta que exista registerManualAttendance")
+        )
     }
 
     suspend fun getAttendances(): List<Map<String, Any>> {

@@ -50,6 +50,17 @@ import kotlinx.coroutines.launch
 fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel: BioSecureViewModel? = null) {
 
     val lang = LocalAppLanguage.current
+    val userRole by (viewModel?.currentRole ?: remember { kotlinx.coroutines.flow.MutableStateFlow("employee") }).collectAsState()
+
+    // Si el rol es admin, no puede automarcarse asistencia biométrica -> redirige al Dashboard
+    LaunchedEffect(userRole, isAdmin) {
+        if (isAdmin || userRole == "admin") {
+            navController.navigate(Screen.Dashboard.route("null")) {
+                popUpTo(Screen.Dashboard.route("null")) { inclusive = true }
+            }
+        }
+    }
+
     var selectedTab by remember { mutableStateOf(0) }
     val tabs = if (lang == "en") listOf("Fingerprint", "Facial Scan") else listOf("Huella Dactilar", "Escaneo Facial")
     val context = LocalContext.current
@@ -77,11 +88,8 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
     var scanSuccess by remember { mutableStateOf(false) }
 
     var showConfirmDialog by remember { mutableStateOf(false) }
-    var pendingLat by remember { mutableStateOf(0.0) }
-    var pendingLng by remember { mutableStateOf(0.0) }
+    var pendingLocation by remember { mutableStateOf<android.location.Location?>(null) }
 
-    val currentUserUid by (viewModel?.currentUserUid
-        ?: kotlinx.coroutines.flow.MutableStateFlow<String?>(null)).collectAsState()
     val currentUserName by (viewModel?.currentUserName
         ?: kotlinx.coroutines.flow.MutableStateFlow("")).collectAsState()
     val isLoading by (viewModel?.isLoading
@@ -89,18 +97,21 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
 
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-    fun registerWithLocation(onResult: (Boolean) -> Unit) {
-        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            val lat = location?.latitude ?: 0.0
-            val lng = location?.longitude ?: 0.0
-            pendingLat = lat
-            pendingLng = lng
-            showConfirmDialog = true
-        }.addOnFailureListener {
-            pendingLat = 0.0
-            pendingLng = 0.0
-            showConfirmDialog = true
-        }
+    fun registerWithLocation() {
+        fusedLocationClient.lastLocation
+            .addOnSuccessListener { location ->
+                if (location == null) {
+                    scanStatus = "GPS no disponible"
+                    scanSuccess = false
+                    return@addOnSuccessListener
+                }
+                pendingLocation = location
+                showConfirmDialog = true
+            }
+            .addOnFailureListener {
+                scanStatus = "GPS no disponible"
+                scanSuccess = false
+            }
     }
 
     val biometricPrompt = remember {
@@ -112,7 +123,7 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                     super.onAuthenticationSucceeded(result)
                     scanSuccess = true
                     scanStatus = "¡Biométrica verificada!"
-                    registerWithLocation {}
+                    registerWithLocation()
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -173,9 +184,9 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    if (pendingLat != 0.0 || pendingLng != 0.0) {
+                    pendingLocation?.let { loc ->
                         Text(
-                            text = "Ubicación: ${String.format("%.4f", pendingLat)}, ${String.format("%.4f", pendingLng)}",
+                            text = "Ubicación: ${String.format("%.4f", loc.latitude)}, ${String.format("%.4f", loc.longitude)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -186,13 +197,19 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                 Button(
                     onClick = {
                         showConfirmDialog = false
-                        val uid = currentUserUid ?: ""
-                        viewModel?.registerAttendance(uid, pendingLat, pendingLng) { success, _ ->
+                        val loc = pendingLocation
+                        if (loc == null) {
+                            scanStatus = "GPS no disponible"
+                            scanSuccess = false
+                            return@Button
+                        }
+                        val tipo = if (selectedTab == 1) "FACIAL" else "HUELLA"
+                        viewModel?.registerAttendanceBiometric(tipo, loc) { success, errorMsg ->
                             if (success) {
                                 navController.navigate(Screen.Confirmation.route)
                             } else {
                                 scanSuccess = false
-                                scanStatus = "Error al registrar asistencia"
+                                scanStatus = errorMsg ?: "Error al registrar asistencia"
                             }
                         }
                     },
@@ -416,7 +433,7 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                             biometricPrompt.authenticate(promptInfo)
                         } else {
                             if (faceDetected) {
-                                registerWithLocation {}
+                                registerWithLocation()
                             }
                         }
                     },

@@ -119,6 +119,7 @@ private fun AdminConfirmedContent(
 ) {
     val userName = lastConfirmation?.userName ?: "Empleado"
     val checkIn = lastConfirmation?.checkIn ?: "--:--"
+    val checkOut = lastConfirmation?.checkOut
     val date = lastConfirmation?.date ?: ""
 
     Column(
@@ -137,7 +138,7 @@ private fun AdminConfirmedContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "Asistencia registrada exitosamente",
+            text = if (!checkOut.isNullOrBlank()) "Salida registrada exitosamente" else "Asistencia registrada exitosamente",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = SuccessGreen,
@@ -159,6 +160,13 @@ private fun AdminConfirmedContent(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                 )
                 ConfirmationRow(label = "Hora de ingreso", value = checkIn)
+                if (!checkOut.isNullOrBlank()) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                    )
+                    ConfirmationRow(label = "Hora de salida", value = checkOut)
+                }
                 if (date.isNotEmpty()) {
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 12.dp),
@@ -291,7 +299,7 @@ private fun EmployeeQRWaitingContent(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = lastConfirmation.checkIn,
+                                text = lastConfirmation.checkOut ?: lastConfirmation.checkIn,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = ErrorRed
@@ -337,12 +345,12 @@ private fun EmployeeQRWaitingContent(
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = if (lang == "en") "Check-in" else "Hora",
+                                text = if (!lastConfirmation.checkOut.isNullOrBlank()) "Salida" else if (lang == "en") "Check-in" else "Hora",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = lastConfirmation.checkIn,
+                                text = lastConfirmation.checkOut ?: lastConfirmation.checkIn,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary

@@ -39,19 +39,11 @@ fun QRScreen(
         ?: kotlinx.coroutines.flow.MutableStateFlow(null)).collectAsState()
     val employeeName = currentUser?.let { "${it.firstName} ${it.lastName}" } ?: "Empleado"
 
-    val signedToken by (viewModel?.qrToken
-        ?: kotlinx.coroutines.flow.MutableStateFlow(null)).collectAsState()
-
-    LaunchedEffect(Unit) {
-        viewModel?.issueCheckInToken()
-    }
-
-    val qrBitmap: Bitmap? = remember(signedToken) {
-        val content = signedToken ?: return@remember null
-        if (content.isEmpty()) return@remember null
+    val qrBitmap: Bitmap? = remember(uid) {
+        if (uid.isBlank()) return@remember null
 
         val writer = QRCodeWriter()
-        val bitMatrix = writer.encode(content, BarcodeFormat.QR_CODE, 512, 512)
+        val bitMatrix = writer.encode(uid, BarcodeFormat.QR_CODE, 512, 512)
         val bmp = Bitmap.createBitmap(512, 512, Bitmap.Config.RGB_565)
         for (x in 0 until 512) {
             for (y in 0 until 512) {

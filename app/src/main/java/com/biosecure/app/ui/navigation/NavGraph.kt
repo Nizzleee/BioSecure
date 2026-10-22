@@ -49,7 +49,6 @@ sealed class Screen(val route: String) {
     object Dashboard : Screen("admin/dashboard/{sedeId}") {
         fun route(sedeId: String?) = "admin/dashboard/${sedeId ?: "null"}"
     }
-    object AdminScan : Screen("admin/scan")
     object AdminHistory : Screen("admin/history")
     object AdminSettings : Screen("admin/settings")
     object AdminRegisterEmployee : Screen("admin/register-employee")
@@ -75,7 +74,7 @@ sealed class Screen(val route: String) {
     object EmployeeQR : Screen("employee/qr")
 
     companion object {
-        fun scan(isAdmin: Boolean) = if (isAdmin) AdminScan.route else EmployeeScan.route
+        fun scan(isAdmin: Boolean) = EmployeeScan.route
         fun history(isAdmin: Boolean) = if (isAdmin) AdminHistory.route else EmployeeHistory.route
         fun settings(isAdmin: Boolean) = if (isAdmin) AdminSettings.route else EmployeeSettings.route
     }
@@ -165,11 +164,6 @@ fun NavGraph(
             }
         }
 
-        composable(Screen.AdminScan.route) {
-            AdminRouteGuard(viewModel = viewModel, navController = navController) {
-                ScanScreen(navController = navController, isAdmin = true, viewModel = viewModel)
-            }
-        }
         composable(Screen.AdminHistory.route) {
             AdminRouteGuard(viewModel = viewModel, navController = navController) {
                 HistoryScreen(navController = navController, isAdmin = true, viewModel = viewModel)

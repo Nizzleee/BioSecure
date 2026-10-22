@@ -1,5 +1,6 @@
 package com.biosecure.app.ui.viewmodel
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -9,11 +10,11 @@ import com.biosecure.app.data.model.Company
 import com.biosecure.app.data.model.ConfirmationData
 import com.biosecure.app.data.model.CompanyRequest
 import com.biosecure.app.data.model.CreateUserRequest
-import com.biosecure.app.data.model.ScanType
 import com.biosecure.app.data.model.UpdateUserRequest
 import com.biosecure.app.data.model.User
 import com.biosecure.app.data.network.AttendanceRequest
 import com.biosecure.app.data.repository.AttendanceRepository
+import com.biosecure.app.data.repository.AttendanceResult
 import com.biosecure.app.data.repository.AuthRepository
 import com.biosecure.app.data.repository.FirebaseFunctionsRepository
 import com.biosecure.app.data.prefs.ThemePreferences
@@ -30,6 +31,7 @@ import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 data class DashboardUiState(
     val totalAttendances: Int = 0,
@@ -48,6 +50,11 @@ class BioSecureViewModel(
     val functionsRepository: FirebaseFunctionsRepository,
     private val themePreferences: ThemePreferences
 ) : ViewModel() {
+
+    companion object {
+        const val MAX_ACCURACY_METERS = 50f
+        const val MAX_LOCATION_AGE_SECONDS = 30L
+    }
 
     val isDarkMode: StateFlow<Boolean?> = themePreferences.isDarkMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -112,6 +119,8 @@ class BioSecureViewModel(
     private val _lastConfirmation = MutableStateFlow<ConfirmationData?>(null)
     val lastConfirmation: StateFlow<ConfirmationData?> = _lastConfirmation.asStateFlow()
 
+    private val pendingRequestIds = mutableMapOf<String, String>()
+
     private val _firestoreEmployees = MutableStateFlow<List<Map<String, Any>>>(emptyList())
     val firestoreEmployees: StateFlow<List<Map<String, Any>>> = _firestoreEmployees.asStateFlow()
 
@@ -135,7 +144,6 @@ class BioSecureViewModel(
     private val _sedes = MutableStateFlow<List<com.biosecure.app.data.model.Sede>>(emptyList())
     val sedes: StateFlow<List<com.biosecure.app.data.model.Sede>> = _sedes.asStateFlow()
 
-    private var nextAttendanceId = 1
 
     fun setRole(role: String) {
         _currentRole.value = role
@@ -483,178 +491,151 @@ class BioSecureViewModel(
         }
     }
 
-    private val _qrToken = MutableStateFlow<String?>(null)
-    val qrToken: StateFlow<String?> = _qrToken.asStateFlow()
+    private fun validateLocation(location: android.location.Location?): String? {
+        if (location == null) return "GPS_UNAVAILABLE"
+        if (!location.hasAccuracy()) return "GPS_UNAVAILABLE"
+        if (location.accuracy > MAX_ACCURACY_METERS) return "ACCURACY_TOO_HIGH"
 
-    suspend fun issueCheckInToken(): Result<String> {
-        return functionsRepository.issueCheckInToken().onSuccess {
-            _qrToken.value = it
+        val ageSeconds = (SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos) / 1_000_000_000L
+        if (ageSeconds > MAX_LOCATION_AGE_SECONDS) {
+            return "GPS_UNAVAILABLE"
         }
+        return null
     }
 
-    fun registerAttendance(qrToken: String, lat: Double, lng: Double, onResult: (Boolean, String?) -> Unit = { _, _ -> }) {
+    fun registerAttendanceQR(
+        scannedUid: String,
+        location: android.location.Location?,
+        onResult: (Boolean, String?) -> Unit = { _, _ -> }
+    ) {
+        if (_isLoading.value) return
+
+        val locError = validateLocation(location)
+        if (locError != null) {
+            _error.value = locError
+            onResult(false, locError)
+            return
+        }
+        val validLoc = location!!
+
         viewModelScope.launch {
             _isLoading.value = true
-            val currentSedeId = _selectedSedeId.value
 
-            functionsRepository.registerAttendance(qrToken, lat, lng, currentSedeId)
-                .onSuccess { resultData ->
-                    _authSuccess.value = "Asistencia registrada: ${resultData["status"]}"
+            val isMock = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                validLoc.isMock
+            } else {
+                @Suppress("DEPRECATION")
+                validLoc.isFromMockProvider
+            }
 
+            val requestKey = "QR_${scannedUid}"
+            val requestId = pendingRequestIds.getOrPut(requestKey) { UUID.randomUUID().toString() }
+
+            when (val result = functionsRepository.registerAttendance(
+                tipo = "QR",
+                lat = validLoc.latitude,
+                lng = validLoc.longitude,
+                accuracy = validLoc.accuracy,
+                isMock = isMock,
+                requestId = requestId,
+                qrToken = scannedUid
+            )) {
+                is AttendanceResult.Success -> {
+                    pendingRequestIds.remove(requestKey)
+                    val resData = result.data
                     _lastConfirmation.value = ConfirmationData(
-                        userName = resultData["userName"] as? String ?: "Empleado",
-                        checkIn = resultData["checkIn"] as? String ?: SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()),
-                        date = resultData["date"] as? String ?: SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()),
-                        scanType = ScanType.QR.name,
-                        status = resultData["status"] as? String ?: "TARDANZA"
+                        userName = resData.userName,
+                        checkIn = resData.checkIn,
+                        checkOut = resData.checkOut,
+                        date = resData.date,
+                        scanType = "QR",
+                        status = resData.status
                     )
+                    _authSuccess.value = "Asistencia registrada correctamente"
                     onResult(true, null)
                 }
-                .onFailure { error ->
-                    val errorMsg = error.message ?: ""
-                    if (errorMsg.contains("NOT_FOUND") || !qrToken.contains(".")) {
-                        val success = registerAttendanceDirect(qrToken, lat, lng, currentSedeId)
-                        onResult(success, if (success) null else "Este empleado ya puso asistencia hoy")
-                    } else {
-                        val msg = when {
-                            errorMsg.contains("ALREADY_EXISTS") -> "Este código QR ya fue utilizado."
-                            errorMsg.contains("ALREADY_REGISTERED") -> "Este empleado ya puso asistencia hoy"
-                            else -> "Error: Fuera de rango o tiempo"
-                        }
-                        _error.value = msg
-                        onResult(false, msg)
+                is AttendanceResult.Error -> {
+                    val code = result.code
+                    val retryableCodes = setOf("NO_NETWORK", "RETRY", "UNAVAILABLE", "INTERNAL_ERROR")
+                    if (code !in retryableCodes) {
+                        pendingRequestIds.remove(requestKey)
                     }
+                    _error.value = code
+                    onResult(false, code)
                 }
+            }
             _isLoading.value = false
         }
     }
 
-    private suspend fun registerAttendanceDirect(uid: String, lat: Double, lng: Double, sedeId: String?): Boolean {
-        val today = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date())
-        val time = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
-        val knownName = _currentUserName.value.ifEmpty { "Empleado" }
+    fun registerAttendanceBiometric(
+        tipo: String, // "HUELLA" | "FACIAL"
+        location: android.location.Location?,
+        onResult: (Boolean, String?) -> Unit = { _, _ -> }
+    ) {
+        if (_isLoading.value) return
 
-        // Set confirmation data immediately so ConfirmationScreen always gets something
-        _lastConfirmation.value = ConfirmationData(
-            userName = knownName,
-            checkIn = time,
-            date = today,
-            scanType = ScanType.QR.name,
-            status = "TARDANZA"
-        )
+        val locError = validateLocation(location)
+        if (locError != null) {
+            _error.value = locError
+            onResult(false, locError)
+            return
+        }
+        val validLoc = location!!
 
-        try {
-            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            // Use a deterministic doc ID: no composite index needed
-            val docId = "${uid}_${today.replace("/", "-")}"
-            val existingDoc = db.collection("attendances").document(docId).get().await()
+        viewModelScope.launch {
+            _isLoading.value = true
 
-            if (existingDoc.exists()) {
-                _lastConfirmation.value = ConfirmationData(
-                    userName = existingDoc.getString("userName") ?: knownName,
-                    checkIn = existingDoc.getString("checkIn") ?: time,
-                    date = today,
-                    scanType = existingDoc.getString("type") ?: ScanType.QR.name,
-                    status = existingDoc.getString("status") ?: "TARDANZA"
-                )
-                return true
+            val isMock = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                validLoc.isMock
+            } else {
+                @Suppress("DEPRECATION")
+                validLoc.isFromMockProvider
             }
 
-            val userDoc = db.collection("users").document(uid).get().await()
-            val userName = userDoc.getString("name") ?: knownName
-            val companyId = userDoc.getString("companyId") ?: _currentCompanyId.value
-            val userShiftId = userDoc.getString("shiftId") ?: ""
-            val attendanceStatus = determineAttendanceStatus(userShiftId)
+            val requestKey = "${tipo}_SELF"
+            val requestId = pendingRequestIds.getOrPut(requestKey) { UUID.randomUUID().toString() }
 
-            val data = hashMapOf(
-                "userId" to uid,
-                "companyId" to companyId,
-                "sedeId" to (sedeId ?: userDoc.getString("sedeId") ?: ""),
-                "userName" to userName,
-                "date" to today,
-                "checkIn" to time,
-                "status" to attendanceStatus.name,
-                "type" to ScanType.QR.name,
-                "location" to (sedes.value.find { it.id == sedeId }?.nombre ?: "Sede"),
-                "latitude" to lat,
-                "longitude" to lng,
-                "timestamp" to com.google.firebase.Timestamp.now()
-            )
-            db.collection("attendances").document(docId).set(data).await()
-
-            _lastConfirmation.value = ConfirmationData(
-                userName = userName,
-                checkIn = time,
-                date = today,
-                scanType = ScanType.QR.name,
-                status = attendanceStatus.name
-            )
-            _authSuccess.value = "Asistencia registrada correctamente"
-        } catch (e: Exception) {
-            _error.value = "Error al guardar: ${e.message}"
-            // lastConfirmation already set above — user will still see QR
-        }
-
-        return true // Always navigate to ConfirmationScreen
-    }
-
-    private fun determineAttendanceStatus(shiftId: String): AttendanceStatus {
-        if (shiftId.isBlank()) return AttendanceStatus.TARDANZA
-        val shift = _shifts.value.find { it.id == shiftId } ?: return AttendanceStatus.TARDANZA
-
-        val cal = java.util.Calendar.getInstance()
-        val currentMinutes = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
-
-        fun timeToMinutes(t: String): Int {
-            val parts = t.split(":").map { it.toIntOrNull() ?: 0 }
-            return (parts.getOrNull(0) ?: 0) * 60 + (parts.getOrNull(1) ?: 0)
-        }
-
-        val startMinutes = timeToMinutes(shift.startTime)
-        val endMinutes = timeToMinutes(shift.endTime)
-
-        return when {
-            currentMinutes > endMinutes -> AttendanceStatus.FALLIDO
-            currentMinutes < (startMinutes - 60) -> AttendanceStatus.FALLIDO
-            else -> AttendanceStatus.TARDANZA
+            when (val result = functionsRepository.registerAttendance(
+                tipo = tipo,
+                lat = validLoc.latitude,
+                lng = validLoc.longitude,
+                accuracy = validLoc.accuracy,
+                isMock = isMock,
+                requestId = requestId,
+                qrToken = null
+            )) {
+                is AttendanceResult.Success -> {
+                    pendingRequestIds.remove(requestKey)
+                    val resData = result.data
+                    _lastConfirmation.value = ConfirmationData(
+                        userName = resData.userName,
+                        checkIn = resData.checkIn,
+                        checkOut = resData.checkOut,
+                        date = resData.date,
+                        scanType = tipo,
+                        status = resData.status
+                    )
+                    _authSuccess.value = "Asistencia registrada correctamente"
+                    onResult(true, null)
+                }
+                is AttendanceResult.Error -> {
+                    val code = result.code
+                    val retryableCodes = setOf("NO_NETWORK", "RETRY", "UNAVAILABLE", "INTERNAL_ERROR")
+                    if (code !in retryableCodes) {
+                        pendingRequestIds.remove(requestKey)
+                    }
+                    _error.value = code
+                    onResult(false, code)
+                }
+            }
+            _isLoading.value = false
         }
     }
 
     fun registerManualAttendance(user: User) {
-        val now = Date()
-        val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
-        val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-        val checkIn = timeFormatter.format(now)
-        val date = dateFormatter.format(now)
-        val userName = "${user.firstName} ${user.lastName}"
-        val attendance = Attendance(
-            id = (nextAttendanceId++).toString(),
-            userId = user.uid,
-            companyId = user.companyId,
-            sedeId = user.sedeId,
-            userName = userName,
-            userImage = user.image,
-            date = date,
-            checkIn = checkIn,
-            checkOut = "",
-            status = AttendanceStatus.EXITOSO,
-            type = ScanType.QR
-        )
-        _lastConfirmation.value = ConfirmationData(
-            userName = userName,
-            checkIn = checkIn,
-            date = date,
-            scanType = ScanType.QR.name,
-            status = AttendanceStatus.EXITOSO.name
-        )
-        _attendances.value = _attendances.value + attendance
-        viewModelScope.launch {
-            try {
-                attendanceRepository.saveAttendance(attendance)
-            } catch (e: Exception) {
-                _error.value = "Error al registrar asistencia: ${e.message}"
-            }
-        }
+        // TODO: Migrar a la Cloud Function registerManualAttendance cuando esté implementada.
+        _error.value = "Función no disponible temporalmente"
     }
 
     fun getStats(): Map<AttendanceStatus, Int> {

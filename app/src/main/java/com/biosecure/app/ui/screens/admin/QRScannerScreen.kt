@@ -56,6 +56,7 @@ fun QRScannerScreen(navController: NavController, viewModel: BioSecureViewModel?
     }
 
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    val qrRegex = remember { Regex("^[A-Za-z0-9]{20,128}$") }
 
     Scaffold(
         topBar = {
@@ -129,17 +130,29 @@ fun QRScannerScreen(navController: NavController, viewModel: BioSecureViewModel?
                                     val result = MultiFormatReader().decode(
                                         BinaryBitmap(HybridBinarizer(source))
                                     )
-                                    val scannedToken = result.text
+                                    val scannedToken = result.text.trim()
+
+                                    if (!qrRegex.matches(scannedToken)) {
+                                        statusText = "Código QR con formato inválido"
+                                        isProcessing = false
+                                        hasScanned.set(false)
+                                        return@setAnalyzer
+                                    }
+
                                     isProcessing = true
-                                    statusText = "QR detectado, registrando..."
+                                    statusText = "QR detectado, obteniendo ubicación..."
 
                                     scope.launch {
                                         fusedLocationClient.lastLocation
                                             .addOnSuccessListener { location ->
-                                                val lat = location?.latitude ?: 0.0
-                                                val lng = location?.longitude ?: 0.0
+                                                if (location == null) {
+                                                    statusText = "GPS no disponible"
+                                                    isProcessing = false
+                                                    hasScanned.set(false)
+                                                    return@addOnSuccessListener
+                                                }
 
-                                                viewModel?.registerAttendance(scannedToken, lat, lng) { success, errorMsg ->
+                                                viewModel?.registerAttendanceQR(scannedToken, location) { success, errorMsg ->
                                                     if (success) {
                                                         statusText = "Asistencia registrada ✅"
                                                         navController.navigate(Screen.Confirmation.route) {
@@ -153,18 +166,9 @@ fun QRScannerScreen(navController: NavController, viewModel: BioSecureViewModel?
                                                 }
                                             }
                                             .addOnFailureListener {
-                                                viewModel?.registerAttendance(scannedToken, 0.0, 0.0) { success, errorMsg ->
-                                                    if (success) {
-                                                        statusText = "Asistencia registrada ✅"
-                                                        navController.navigate(Screen.Confirmation.route) {
-                                                            popUpTo(Screen.AdminQRScan.route) { inclusive = false }
-                                                        }
-                                                    } else {
-                                                        statusText = errorMsg ?: "Error al registrar asistencia"
-                                                        isProcessing = false
-                                                        hasScanned.set(false)
-                                                    }
-                                                }
+                                                statusText = "GPS no disponible"
+                                                isProcessing = false
+                                                hasScanned.set(false)
                                             }
                                     }
                                 } catch (_: NotFoundException) {

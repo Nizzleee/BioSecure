@@ -20,6 +20,7 @@ data class Attendance(
 data class ConfirmationData(
     val userName: String,
     val checkIn: String,
+    val checkOut: String? = null,
     val date: String,
     val scanType: String,
     val location: String = "Sede Central",
