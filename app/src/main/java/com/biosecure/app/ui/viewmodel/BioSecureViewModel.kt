@@ -509,9 +509,11 @@ class BioSecureViewModel(
         onResult: (Boolean, String?) -> Unit = { _, _ -> }
     ) {
         if (_isLoading.value) return
+        _isLoading.value = true
 
         val locError = validateLocation(location)
         if (locError != null) {
+            _isLoading.value = false
             _error.value = locError
             onResult(false, locError)
             return
@@ -519,8 +521,6 @@ class BioSecureViewModel(
         val validLoc = location!!
 
         viewModelScope.launch {
-            _isLoading.value = true
-
             val isMock = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                 validLoc.isMock
             } else {
@@ -574,9 +574,11 @@ class BioSecureViewModel(
         onResult: (Boolean, String?) -> Unit = { _, _ -> }
     ) {
         if (_isLoading.value) return
+        _isLoading.value = true
 
         val locError = validateLocation(location)
         if (locError != null) {
+            _isLoading.value = false
             _error.value = locError
             onResult(false, locError)
             return
@@ -584,8 +586,6 @@ class BioSecureViewModel(
         val validLoc = location!!
 
         viewModelScope.launch {
-            _isLoading.value = true
-
             val isMock = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
                 validLoc.isMock
             } else {
