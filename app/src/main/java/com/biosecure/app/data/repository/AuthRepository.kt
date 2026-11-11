@@ -1,7 +1,9 @@
 package com.biosecure.app.data.repository
 
+import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Source
 import kotlinx.coroutines.tasks.await
@@ -41,6 +43,47 @@ class AuthRepository {
             }
             auth.signOut()
             Result.failure(Exception("Usuario sin rol asignado en el sistema"))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun loginWithGoogle(idToken: String, photoUrl: String?, displayName: String?, email: String?): Result<UserLoginResult> {
+        return try {
+            val credential = GoogleAuthProvider.getCredential(idToken, null)
+            val authResult = auth.signInWithCredential(credential).await()
+            val user = authResult.user!!
+
+            val doc = db.collection("users").document(user.uid).get(Source.SERVER).await()
+            if (doc.exists()) {
+                val role = doc.getString("role")
+                val companyId = doc.getString("companyId") ?: "BioSecure"
+                val name = doc.getString("name") ?: displayName ?: user.email ?: "Usuario"
+                val image = doc.getString("image") ?: photoUrl ?: ""
+                // Update photo if Google has one and stored one is empty
+                if (image.isEmpty() && !photoUrl.isNullOrEmpty()) {
+                    db.collection("users").document(user.uid).update("image", photoUrl).await()
+                }
+                val finalImage = if (image.isNotEmpty()) image else (photoUrl ?: "")
+                if (role != null) {
+                    return Result.success(UserLoginResult(user, role, name, companyId, finalImage))
+                }
+            }
+
+            // First-time Google user: create as employee of default company
+            val companyId = "Pizzer" + "\u00ED" + "a"
+            val name = displayName ?: user.displayName ?: user.email ?: "Usuario"
+            val image = photoUrl ?: user.photoUrl?.toString() ?: ""
+            val userData = hashMapOf(
+                "email" to (email ?: user.email ?: ""),
+                "role" to "employee",
+                "name" to name,
+                "image" to image,
+                "companyId" to companyId
+            )
+            db.collection("users").document(user.uid).set(userData).await()
+
+            Result.success(UserLoginResult(user, "employee", name, companyId, image))
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -104,6 +147,21 @@ class AuthRepository {
     }
 
     fun isLoggedIn(): Boolean = auth.currentUser != null
+
+    suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> {
+        return try {
+            val user = auth.currentUser ?: return Result.failure(Exception("No hay sesión activa"))
+            val email = user.email ?: return Result.failure(Exception("No hay correo asociado a la cuenta"))
+            // Re-autenticar con la contraseña actual
+            val credential = EmailAuthProvider.getCredential(email, currentPassword)
+            user.reauthenticate(credential).await()
+            // Cambiar contraseña
+            user.updatePassword(newPassword).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     fun logout() { auth.signOut() }
 }

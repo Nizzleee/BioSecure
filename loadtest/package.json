@@ -1,0 +1,16 @@
+{
+  "name": "biosecure-loadtest",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Seed, smoke test, load test and PostgreSQL worker for the BioSecure attendance flow",
+  "scripts": {
+    "seed": "node ../scripts/seed_emulator.js",
+    "smoke": "node ../scripts/smoke_http.js",
+    "load": "node ../scripts/load_test.js",
+    "worker": "node ../scripts/postgres_worker.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "pg": "^8.13.1"
+  }
+}

@@ -24,9 +24,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.navigation.NavController
+import com.biosecure.app.data.location.BestLocationProvider
 import com.biosecure.app.ui.navigation.Screen
 import com.biosecure.app.ui.screens.scan.BioSecureBottomBar
+import com.biosecure.app.ui.screens.scan.attendanceErrorText
 import com.biosecure.app.ui.viewmodel.BioSecureViewModel
 import com.google.android.gms.location.LocationServices
 import com.google.zxing.BinaryBitmap
@@ -49,13 +53,27 @@ fun QRScannerScreen(navController: NavController, viewModel: BioSecureViewModel?
     var statusText by remember { mutableStateOf("Apunte la cámara al código QR del empleado") }
     var isProcessing by remember { mutableStateOf(false) }
 
-    val hasCameraPermission = remember {
-        ContextCompat.checkSelfPermission(
-            context, android.Manifest.permission.CAMERA
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.CAMERA
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasCameraPermission = granted
+        if (!granted) statusText = "Permiso de cámara requerido"
+    }
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) {
+            cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+        }
     }
 
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    val bestLocationProvider = remember { BestLocationProvider(fusedLocationClient) }
     val qrRegex = remember { Regex("^[A-Za-z0-9]{20,128}$") }
 
     Scaffold(
@@ -89,11 +107,17 @@ fun QRScannerScreen(navController: NavController, viewModel: BioSecureViewModel?
         ) {
             if (!hasCameraPermission) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "Permiso de cámara requerido",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Permiso de cámara requerido",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Button(onClick = {
+                            cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+                        }) { Text("Permitir cámara") }
+                    }
                 }
                 return@Scaffold
             }
@@ -143,33 +167,29 @@ fun QRScannerScreen(navController: NavController, viewModel: BioSecureViewModel?
                                     statusText = "QR detectado, obteniendo ubicación..."
 
                                     scope.launch {
-                                        fusedLocationClient.lastLocation
-                                            .addOnSuccessListener { location ->
-                                                if (location == null) {
-                                                    statusText = "GPS no disponible"
-                                                    isProcessing = false
-                                                    hasScanned.set(false)
-                                                    return@addOnSuccessListener
-                                                }
+                                        val location = bestLocationProvider.awaitBest(
+                                            minAccuracyMeters = BioSecureViewModel.MAX_ACCURACY_METERS,
+                                            timeoutMs = 20_000L
+                                        )
+                                        if (location == null) {
+                                            statusText = attendanceErrorText("GPS_UNAVAILABLE", "es")
+                                            isProcessing = false
+                                            hasScanned.set(false)
+                                            return@launch
+                                        }
 
-                                                viewModel?.registerAttendanceQR(scannedToken, location) { success, errorMsg ->
-                                                    if (success) {
-                                                        statusText = "Asistencia registrada ✅"
-                                                        navController.navigate(Screen.Confirmation.route) {
-                                                            popUpTo(Screen.AdminQRScan.route) { inclusive = false }
-                                                        }
-                                                    } else {
-                                                        statusText = errorMsg ?: "Error al registrar asistencia"
-                                                        isProcessing = false
-                                                        hasScanned.set(false)
-                                                    }
+                                        viewModel?.registerAttendanceQR(scannedToken, location) { success, errorMsg ->
+                                            if (success) {
+                                                statusText = "Asistencia registrada ✅"
+                                                navController.navigate(Screen.Confirmation.route) {
+                                                    popUpTo(Screen.AdminQRScan.route) { inclusive = false }
                                                 }
-                                            }
-                                            .addOnFailureListener {
-                                                statusText = "GPS no disponible"
+                                            } else {
+                                                statusText = attendanceErrorText(errorMsg, "es")
                                                 isProcessing = false
                                                 hasScanned.set(false)
                                             }
+                                        }
                                     }
                                 } catch (_: NotFoundException) {
                                     hasScanned.set(false)

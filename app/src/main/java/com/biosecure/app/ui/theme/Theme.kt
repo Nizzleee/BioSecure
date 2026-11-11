@@ -8,7 +8,6 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -17,11 +16,11 @@ private val BioSecureLightColorScheme = lightColorScheme(
     onPrimary = White,
     primaryContainer = GreenMedium,
     onPrimaryContainer = White,
-    secondary = Teal,
+    secondary = TealDark,
     onSecondary = White,
     secondaryContainer = Color(0xFFB2EBE8),
     onSecondaryContainer = GreenDark,
-    tertiary = TealLight,
+    tertiary = TealDark,
     onTertiary = White,
     tertiaryContainer = Color(0xFFD0F5F3),
     onTertiaryContainer = GreenDark,
@@ -44,15 +43,15 @@ private val BioSecureLightColorScheme = lightColorScheme(
 
 private val DarkColorScheme = darkColorScheme(
     primary = Color(0xFF1ED9C5),
-    onPrimary = Color.White,
+    onPrimary = Color(0xFF00312C),
     primaryContainer = Color(0xFF0D3B35),
     onPrimaryContainer = Color(0xFFB8FFF0),
     secondary = Color(0xFF1ED9C5),
-    onSecondary = Color.White,
+    onSecondary = Color(0xFF00312C),
     secondaryContainer = Color(0xFF004F47),
     onSecondaryContainer = Color(0xFFB8FFF0),
     tertiary = Color(0xFF4ECDC4),
-    onTertiary = Color.White,
+    onTertiary = Color(0xFF00312C),
     tertiaryContainer = Color(0xFF005048),
     onTertiaryContainer = Color(0xFFB8FFF0),
     background = Color(0xFF101512),
@@ -83,8 +82,12 @@ fun BioSecureTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = if (darkTheme) DarkBackground.toArgb() else GreenDark.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            // El fondo de las barras lo aporta el contenido (edge-to-edge);
+            // solo ajustamos el color de los iconos para que se lean siempre.
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !darkTheme
+                isAppearanceLightNavigationBars = !darkTheme
+            }
         }
     }
 

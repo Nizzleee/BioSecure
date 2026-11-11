@@ -18,7 +18,8 @@ data class AttendanceResponseData(
 
 sealed class AttendanceResult {
     data class Success(val data: AttendanceResponseData) : AttendanceResult()
-    data class Error(val code: String) : AttendanceResult()
+    /** [score] solo viene informado en FACE_MISMATCH (similitud 0..1). */
+    data class Error(val code: String, val score: Double? = null) : AttendanceResult()
 }
 
 class FirebaseFunctionsRepository {
@@ -46,7 +47,9 @@ class FirebaseFunctionsRepository {
         accuracy: Float,
         isMock: Boolean,
         requestId: String,
-        qrToken: String? = null
+        qrToken: String? = null,
+        faceEmbedding: List<Double>? = null,
+        faceEmbeddingModel: String? = null
     ): AttendanceResult {
         val payload = mutableMapOf<String, Any>(
             "tipo" to tipo,
@@ -58,6 +61,10 @@ class FirebaseFunctionsRepository {
         )
         if (!qrToken.isNullOrBlank()) {
             payload["qrToken"] = qrToken
+        }
+        if (faceEmbedding != null && faceEmbeddingModel != null) {
+            payload["faceEmbedding"] = faceEmbedding
+            payload["faceEmbeddingModel"] = faceEmbeddingModel
         }
 
         var attempt = 0
@@ -82,8 +89,10 @@ class FirebaseFunctionsRepository {
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
 
+                var score: Double? = null
                 val code = if (e is FirebaseFunctionsException) {
                     val detailsMap = e.details as? Map<*, *>
+                    score = (detailsMap?.get("score") as? Number)?.toDouble()
                     detailsMap?.get("code") as? String ?: e.code.name
                 } else if (e is IOException) {
                     "NO_NETWORK"
@@ -97,7 +106,7 @@ class FirebaseFunctionsRepository {
                     continue
                 }
 
-                return AttendanceResult.Error(code)
+                return AttendanceResult.Error(code, score)
             }
         }
         return AttendanceResult.Error("RETRY")

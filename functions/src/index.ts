@@ -1,3 +1,15 @@
+/**
+ * PENDIENTE DE BLAZE — NO DESPLEGADO.
+ *
+ * El proyecto bio-f146c sigue en plan Spark, así que estas Cloud Functions no
+ * se pueden desplegar. La app migró a verificación facial y registro de
+ * asistencia 100 % locales (ver AttendanceRepository.registerLocalAttendance
+ * y FaceRecognitionRepository.verify).
+ *
+ * Este archivo se conserva intacto como referencia para el futuro: si se
+ * activa Blaze, `registerAttendance` vuelve a ser la vía autoritativa. No
+ * borrar. Ver functions/PENDING-BLAZE.md.
+ */
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineInt } from "firebase-functions/params";
 import * as admin from "firebase-admin";
@@ -5,6 +17,7 @@ import { createHash } from "crypto";
 import { calculateHaversineDistance } from "./logic/haversine";
 import { formatServerTime, hhMmToMinutes } from "./logic/timeUtils";
 import { calculateAttendanceStatus, ShiftConfig, AttendanceLogicError } from "./logic/attendanceCalculator";
+import { verifyFaceOrThrow } from "./faceVerification";
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -24,6 +37,10 @@ export interface RegisterAttendancePayload {
   accuracy: number;
   isMock?: boolean; // Nota: clientMockFlag se guarda en el documento como señal de telemetría no confiable
   requestId: string;
+  // Verificación facial (solo tipo FACIAL). El cliente genera la plantilla,
+  // pero es este servidor quien decide si coincide con la almacenada.
+  faceEmbedding?: number[];
+  faceEmbeddingModel?: string;
 }
 
 /**
@@ -47,6 +64,30 @@ export const registerAttendance = onCall(
     // 2. Validación Estricta de Tipos de Entrada
     if (typeof data.tipo !== "string" || !["HUELLA", "FACIAL", "QR"].includes(data.tipo)) {
       throw new HttpsError("invalid-argument", "Tipo de marcación inválido o ausente", { code: "INVALID_TYPE" });
+    }
+
+    // --- VERIFICACIÓN FACIAL AUTORITATIVA (servidor) ---
+    // Se ejecuta antes de validar GPS, sede y turno. El cliente nunca compara
+    // ni decide: solo envía la plantilla generada en el dispositivo.
+    let faceMatchScore: number | null = null;
+    if (data.tipo === "FACIAL") {
+      if (
+        !Array.isArray(data.faceEmbedding) ||
+        data.faceEmbedding.length === 0 ||
+        typeof data.faceEmbeddingModel !== "string" ||
+        data.faceEmbeddingModel.trim() === ""
+      ) {
+        throw new HttpsError(
+          "invalid-argument",
+          "Plantilla facial ausente o inválida",
+          { code: "FACE_EMBEDDING_INVALID" }
+        );
+      }
+      faceMatchScore = await verifyFaceOrThrow(
+        callerUid,
+        data.faceEmbedding,
+        data.faceEmbeddingModel
+      );
     }
 
     if (typeof data.lat !== "number" || !Number.isFinite(data.lat) || data.lat < -90.0 || data.lat > 90.0 ||
@@ -477,7 +518,8 @@ export const registerAttendance = onCall(
       companyId: logCompanyId,
       type: resultPayload?.type,
       status: resultPayload?.status,
-      requestId: requestId
+      requestId: requestId,
+      faceMatchScore: faceMatchScore
     }));
 
     return resultPayload;

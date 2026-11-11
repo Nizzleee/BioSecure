@@ -1,0 +1,142 @@
+# End-to-end load test for the registerAttendance callable.
+#
+#   docker compose -f docker-compose.loadtest.yml up --build
+#
+# Pipeline: emulator -> seed -> smoke -> loadtest -> postgres -> worker
+# Every dependency waits for the previous stage to finish successfully, so a
+# broken HTTP path stops the run before any load is generated.
+#
+#   docker compose -f docker-compose.loadtest.yml down -v
+#
+# Results are written to ./loadtest/results/loadtest-latest.json.
+# The Emulator UI is exposed at http://localhost:4000.
+
+name: biosecure-loadtest
+
+x-emulator-env: &emulator-env
+  FIRESTORE_EMULATOR_HOST: emulator:8080
+  FIREBASE_AUTH_EMULATOR_HOST: emulator:9099
+  FUNCTIONS_EMULATOR_HOST: emulator
+  FUNCTIONS_EMULATOR_PORT: "5001"
+  AUTH_EMULATOR_HOST: emulator
+  AUTH_EMULATOR_PORT: "9099"
+  FIREBASE_PROJECT_ID: demo-biosecure
+  SEED_TIMEZONE: America/Lima
+  SEED_PASSWORD: "Test1234!"
+  SEED_EMPLOYEE_EMAIL_DOMAIN: demo.biosecure.test
+  SEED_SEDE_LAT: "-12.0464"
+  SEED_SEDE_LNG: "-77.0429"
+  SEED_SEDE_RADIO_METROS: "300"
+  SEED_SHIFT_START: "00:00"
+  SEED_SHIFT_END: "23:59"
+  SEED_SHIFT_TOLERANCE_MIN: "0"
+
+services:
+  emulator:
+    build:
+      context: .
+      dockerfile: docker/firebase-emulator/Dockerfile
+    environment:
+      GCLOUD_PROJECT: demo-biosecure
+    ports:
+      - "4000:4000"   # Emulator UI
+      - "4400:4400"   # Emulator hub
+      - "4500:4500"   # Logging
+      - "5001:5001"   # Functions (HTTP callable)
+      - "8080:8080"   # Firestore
+      - "9099:9099"   # Auth
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1:4400/emulators')
+          .then(r => r.json())
+          .then(j => { if (!j.auth || !j.firestore || !j.functions) process.exit(1); })
+          .catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+    stop_grace_period: 20s
+
+  seed:
+    build:
+      context: .
+      dockerfile: docker/loadtest/Dockerfile
+    environment:
+      <<: *emulator-env
+      SEED_EMPLOYEES: "400"   # 1..361 for the ladder, 400 reserved for the smoke test
+      SEED_RESET: "true"
+    command: ["node", "scripts/seed_emulator.js"]
+    depends_on:
+      emulator:
+        condition: service_healthy
+    restart: "no"
+
+  smoke:
+    build:
+      context: .
+      dockerfile: docker/loadtest/Dockerfile
+    environment:
+      <<: *emulator-env
+      SMOKE_EMPLOYEE_INDEX: "400"
+      SMOKE_EXPECTED_MAX_ACCURACY: "45"
+    command: ["node", "scripts/smoke_http.js"]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    restart: "no"
+
+  loadtest:
+    build:
+      context: .
+      dockerfile: docker/loadtest/Dockerfile
+    environment:
+      <<: *emulator-env
+      LOADTEST_STAGES: "1,10,50,100,200"
+      LOADTEST_EMPLOYEE_START: "1"
+      LOADTEST_COOLDOWN_MS: "2000"
+      LOADTEST_OUTPUT: loadtest/results/loadtest-latest.json
+    volumes:
+      - ./loadtest/results:/app/loadtest/results
+    command: ["node", "scripts/load_test.js"]
+    depends_on:
+      smoke:
+        condition: service_completed_successfully
+    restart: "no"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: biosecure
+      POSTGRES_USER: biosecure
+      POSTGRES_PASSWORD: biosecure
+    ports:
+      - "5433:5432"   # 5433 on the host to avoid clashing with a local PostgreSQL
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biosecure -d biosecure"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/loadtest/Dockerfile
+    environment:
+      <<: *emulator-env
+      DATABASE_URL: postgres://biosecure:biosecure@postgres:5432/biosecure
+      PG_SCHEMA_FILE: docker/postgres/init.sql
+    command: ["node", "scripts/postgres_worker.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      loadtest:
+        condition: service_completed_successfully
+    restart: "no"
+
+volumes:
+  postgres-data:

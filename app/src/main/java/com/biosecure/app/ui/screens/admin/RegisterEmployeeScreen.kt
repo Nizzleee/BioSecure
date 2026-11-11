@@ -403,7 +403,7 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
                             FirebaseFirestore.getInstance()
                                 .collection("users").document(uid).set(userData).await()
 
-                            navController.navigate(Screen.AdminEmployeeQR.route(uid)) {
+                            navController.navigate(Screen.AdminEmployeeList.route(null)) {
                                 popUpTo(Screen.AdminRegisterEmployee.route) { inclusive = true }
                             }
                         } catch (e: Exception) {

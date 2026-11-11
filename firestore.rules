@@ -21,13 +21,80 @@ service cloud.firestore {
              getUserData().companyId == companyId;
     }
 
-    // 1. attendances: Prohibida la escritura directa a clientes.
+    // 1. attendances: escritura directa del propio empleado (arquitectura
+    // 100 % local, sin Cloud Functions).
+    //
+    // - create: solo el documento del propio uid, con el schema exacto que
+    //   escribÃƒÂ­a registerAttendance. No se aceptan campos extra ni tipos
+    //   distintos. El check-out debe nacer vacÃƒÂ­o.
+    // - update: SOLO se permite pasar checkOut de "" a HH:mm y actualizar
+    //   updatedAt. No se puede cambiar userId, fecha, estado, sede, GPS ni
+    //   ningÃƒÂºn otro campo.
+    // - delete: prohibido.
     match /attendances/{attendanceId} {
-      allow create, update, delete: if false;
+      // resource == null permite consultar si el documento del dÃƒÂ­a ya existe
+      // (get de un doc inexistente). No expone datos de otros usuarios.
       allow read: if isAuthenticated() && (
+        resource == null ||
         resource.data.userId == request.auth.uid ||
         isAdminOfCompany(resource.data.companyId)
       );
+
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.marcadoPor == request.auth.uid
+        && request.resource.data.companyId == getUserData().companyId
+        && request.resource.data.sedeId == getUserData().sedeId
+        && attendanceId.matches('^' + request.auth.uid + '_[0-9]{8}$')
+        && request.resource.data.keys().hasAll([
+             'userId', 'companyId', 'sedeId', 'userName', 'date', 'checkIn',
+             'checkOut', 'status', 'type', 'location', 'latitude', 'longitude',
+             'accuracy', 'distanceMeters', 'requestId', 'marcadoPor',
+             'clientMockFlag', 'createdAt', 'updatedAt'
+           ])
+        && request.resource.data.keys().hasOnly([
+             'userId', 'companyId', 'sedeId', 'userName', 'date', 'checkIn',
+             'checkOut', 'status', 'type', 'location', 'latitude', 'longitude',
+             'accuracy', 'distanceMeters', 'requestId', 'marcadoPor',
+             'clientMockFlag', 'createdAt', 'updatedAt'
+           ])
+        && request.resource.data.userName is string
+        && request.resource.data.userName.size() > 0
+        && request.resource.data.date is string
+        && request.resource.data.date.matches('^[0-9]{2}/[0-9]{2}/[0-9]{4}$')
+        && request.resource.data.checkIn is string
+        && request.resource.data.checkIn.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$')
+        && request.resource.data.checkOut == ''
+        && request.resource.data.status in ['PUNTUAL', 'TARDANZA']
+        && request.resource.data.type in ['FACIAL', 'HUELLA']
+        && request.resource.data.location is string
+        && request.resource.data.latitude is number
+        && request.resource.data.latitude >= -90.0
+        && request.resource.data.latitude <= 90.0
+        && request.resource.data.longitude is number
+        && request.resource.data.longitude >= -180.0
+        && request.resource.data.longitude <= 180.0
+        && request.resource.data.accuracy is number
+        && request.resource.data.accuracy >= 0
+        && request.resource.data.accuracy <= 50
+        && request.resource.data.distanceMeters is int
+        && request.resource.data.distanceMeters >= 0
+        && request.resource.data.requestId is string
+        && request.resource.data.requestId.matches('^[A-Za-z0-9-]{8,64}$')
+        && request.resource.data.clientMockFlag is bool
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+
+      allow update: if isAuthenticated()
+        && request.auth.uid == resource.data.userId
+        && resource.data.checkOut == ''
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checkOut', 'updatedAt'])
+        && request.resource.data.checkOut is string
+        && request.resource.data.checkOut != ''
+        && request.resource.data.checkOut.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$')
+        && request.resource.data.updatedAt is timestamp;
+
+      allow delete: if false;
     }
 
     // 2. idempotency_keys: Acceso cliente denegado al 100%. Solo Admin SDK.
@@ -35,16 +102,19 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // 3. users: Perfiles de usuario y restricciones de modificación
+    // 3. users: Perfiles de usuario y restricciones de modificaciÃƒÂ³n
     match /users/{userId} {
       allow read: if isAuthenticated() && (
         request.auth.uid == userId ||
-        isAdminOfCompany(resource.data.companyId)
+        getUserData().role == 'admin'
       );
 
       allow create: if isAuthenticated() &&
         request.resource.data.role == 'employee' &&
-        isAdminOfCompany(request.resource.data.companyId);
+        (
+           isAdminOfCompany(request.resource.data.companyId) ||
+           request.auth.uid == userId
+        );
 
       allow update: if isAuthenticated() && (
         (request.auth.uid == userId &&
@@ -55,13 +125,34 @@ service cloud.firestore {
       );
 
       allow delete: if isAdminOfCompany(resource.data.companyId) && resource.data.role != 'admin';
+
+      // 3.1 Plantilla facial (dato biomÃƒÂ©trico): solo el propio usuario.
+      // Se guarda una subcolecciÃƒÂ³n con un ÃƒÂºnico documento "current" que
+      // contiene la plantilla matemÃƒÂ¡tica, nunca las fotos.
+      //
+      // PENDIENTE (BLOQUEANTE PARA RELEASE): hoy el cliente puede escribir su
+      // propia plantilla. Antes de publicar, mover el enrolamiento a una
+      // callable `enrollFace` con Admin SDK y dejar esta subcolecciÃƒÂ³n en
+      // `allow write: if false`. Ver SECURITY-TODO.md.
+      match /faceEmbedding/{docId} {
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        allow create, update: if isAuthenticated()
+          && request.auth.uid == userId
+          && docId == 'current'
+          && request.resource.data.model is string
+          && request.resource.data.dim is int
+          && request.resource.data.vectors is list
+          && request.resource.data.vectors.size() >= 1
+          && request.resource.data.vectors.size() <= 5;
+        allow delete: if isAuthenticated() && request.auth.uid == userId;
+      }
     }
 
     // 4. companies y subcolecciones (shifts, sedes)
     match /companies/{companyId} {
       allow read: if isMemberOfCompany(companyId);
       allow create, delete: if false;
-      // Eliminado 'shifts' (es subcolección) y 'geoFence' (se usan sedes). Campos editables en raíz: name, horaEntrada, toleranciaMin
+      // Eliminado 'shifts' (es subcolecciÃƒÂ³n) y 'geoFence' (se usan sedes). Campos editables en raÃƒÂ­z: name, horaEntrada, toleranciaMin
       allow update: if isAdminOfCompany(companyId) &&
                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'horaEntrada', 'toleranciaMin']);
 

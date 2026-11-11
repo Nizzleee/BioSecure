@@ -30,3 +30,7 @@ serviceAccount*.json
 
 # IDE / Local config
 .claude/
+
+# Load test artifacts
+loadtest/node_modules/
+loadtest/results/

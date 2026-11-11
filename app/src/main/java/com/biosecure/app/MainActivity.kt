@@ -9,6 +9,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModelProvider
 import com.biosecure.app.data.repository.AttendanceRepository
 import com.biosecure.app.data.repository.AuthRepository
+import com.biosecure.app.data.repository.FaceRecognitionRepository
 import com.biosecure.app.data.repository.FirebaseFunctionsRepository
 import com.biosecure.app.data.prefs.ThemePreferences
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -45,8 +46,15 @@ class MainActivity : FragmentActivity() {
         val authRepository = AuthRepository()
         val attendanceRepository = AttendanceRepository()
         val functionsRepository = FirebaseFunctionsRepository()
+        val faceRecognitionRepository = FaceRecognitionRepository(applicationContext)
         val themePreferences = ThemePreferences(this)
-        val factory = BioSecureViewModelFactory(authRepository, attendanceRepository, functionsRepository, themePreferences)
+        val factory = BioSecureViewModelFactory(
+            authRepository,
+            attendanceRepository,
+            functionsRepository,
+            faceRecognitionRepository,
+            themePreferences
+        )
         val viewModel = ViewModelProvider(this, factory)[BioSecureViewModel::class.java]
 
         FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->

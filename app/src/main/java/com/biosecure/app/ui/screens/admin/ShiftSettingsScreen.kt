@@ -120,7 +120,12 @@ fun ShiftSettingsScreen(
                     ) {
                         ShiftCard(
                             shift = shift,
-                            onDelete = { localShifts = localShifts.filter { s -> s != shift } },
+                            onDelete = {
+                                if (shift.id.isNotEmpty()) {
+                                    companyId?.let { viewModel?.deleteShift(shift.id) }
+                                }
+                                localShifts = localShifts.filter { s -> s != shift }
+                            },
                             onEdit = { updated -> localShifts = localShifts.map { s -> if (s == shift) updated else s } }
                         )
                     }

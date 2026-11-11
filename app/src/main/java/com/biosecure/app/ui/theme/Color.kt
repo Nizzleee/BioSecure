@@ -9,6 +9,7 @@ val Background = Color(0xFFF5F7FA)
 
 // Complementarios
 val GreenMedium = Color(0xFF1A5C52)
+val TealDark = Color(0xFF00736B)   // teal con contraste suficiente sobre fondo claro
 val TealLight = Color(0xFF4ECDC4)
 val TextPrimary = Color(0xFF1A1A2E)
 val TextSecondary = Color(0xFF6B7280)

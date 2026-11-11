@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
@@ -26,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -85,17 +87,17 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { selectedSede = null; showSheet = true },
-                icon = { Icon(Icons.Default.Add, null, tint = Color.White) },
+                icon = { Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.onPrimary) },
                 text = {
                     Text(
                         "Nueva Sede",
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 elevation = FloatingActionButtonDefaults.elevation(8.dp)
             )
         }
@@ -121,6 +123,9 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
                                 selectedSede = sede
                                 showSheet = true
                             },
+                            onDelete = {
+                                viewModel?.deleteSede(sede.id)
+                            },
                             onClick = {
                                 viewModel?.setSelectedSede(sede.id)
                                 navController.navigate(Screen.Dashboard.route(sede.id)) {
@@ -139,7 +144,7 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
             sede = selectedSede,
             onDismiss = { showSheet = false },
             onSave = { nombre, lat, lng, radio ->
-                viewModel?.saveSede(nombre, lat, lng, radio)
+                viewModel?.saveSede(nombre, lat, lng, radio, selectedSede?.id ?: "")
                 showSheet = false
             }
         )
@@ -147,7 +152,7 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
 }
 
 @Composable
-fun SedeCard(sede: Sede, onEdit: (() -> Unit)? = null, onClick: () -> Unit) {
+fun SedeCard(sede: Sede, onEdit: (() -> Unit)? = null, onDelete: (() -> Unit)? = null, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -174,24 +179,39 @@ fun SedeCard(sede: Sede, onEdit: (() -> Unit)? = null, onClick: () -> Unit) {
                         sede.nombre,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (sede.id.isNotEmpty()) {
                         Text(
                             "Radio: ${sede.radioMetros}m • Geofence Activo",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
 
-                if (onEdit != null && sede.id.isNotEmpty()) {
-                    IconButton(onClick = onEdit) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Editar",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                if (sede.id.isNotEmpty()) {
+                    if (onEdit != null) {
+                        IconButton(onClick = onEdit) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Editar",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                    if (onDelete != null) {
+                        IconButton(onClick = onDelete) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Eliminar",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             }
@@ -245,8 +265,13 @@ fun SedeEditorBottomSheet(
         cursorColor = MaterialTheme.colorScheme.primary
     )
 
+    val markerState = remember { MarkerState(position = location) }
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(location, 16f)
+    }
+
+    LaunchedEffect(location) {
+        if (markerState.position != location) markerState.position = location
     }
 
     LaunchedEffect(location) {
@@ -352,7 +377,7 @@ fun SedeEditorBottomSheet(
                     properties = properties
                 ) {
                     Marker(
-                        state = MarkerState(position = location),
+                        state = markerState,
                         draggable = true,
                         title = nombre.ifBlank { "Nueva Sede" }
                     )
@@ -401,14 +426,14 @@ fun SedeEditorBottomSheet(
                 enabled = nombre.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             ) {
-                Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(18.dp), tint = Color.White)
+                Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimary)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "Guardar Configuración",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )

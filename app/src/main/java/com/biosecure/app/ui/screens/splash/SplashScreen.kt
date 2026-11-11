@@ -12,20 +12,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.view.WindowCompat
 import androidx.navigation.NavController
 import com.biosecure.app.R
 import com.biosecure.app.data.repository.AuthRepository
 import com.biosecure.app.ui.navigation.Screen
+import com.biosecure.app.ui.theme.TealLight
 import com.biosecure.app.ui.viewmodel.BioSecureViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -37,6 +41,22 @@ fun SplashScreen(
     viewModel: BioSecureViewModel? = null
 ) {
     val scale = remember { Animatable(0.3f) }
+
+    // El splash siempre es oscuro: forzamos iconos claros en las barras y
+    // restauramos el valor del tema al salir.
+    val view = LocalView.current
+    DisposableEffect(Unit) {
+        val window = (view.context as android.app.Activity).window
+        val controller = WindowCompat.getInsetsController(window, view)
+        val prevStatus = controller.isAppearanceLightStatusBars
+        val prevNav = controller.isAppearanceLightNavigationBars
+        controller.isAppearanceLightStatusBars = false
+        controller.isAppearanceLightNavigationBars = false
+        onDispose {
+            controller.isAppearanceLightStatusBars = prevStatus
+            controller.isAppearanceLightNavigationBars = prevNav
+        }
+    }
 
     LaunchedEffect(Unit) {
         launch {
@@ -91,7 +111,7 @@ fun SplashScreen(
             Text(
                 text = "Sistema de Asistencia Biométrica",
                 fontSize = 14.sp,
-                color = Color(0xFF00B4A6)
+                color = TealLight
             )
         }
     }

@@ -64,8 +64,8 @@ fun ShiftManagerScreen(navController: NavController, viewModel: BioSecureViewMod
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { editingShift = null; showAddShiftSheet = true },
-                icon = { Icon(Icons.Default.Add, null, tint = Color.White) },
-                text = { Text("Nuevo Horario", color = Color.White) },
+                icon = { Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.onPrimary) },
+                text = { Text("Nuevo Horario", color = MaterialTheme.colorScheme.onPrimary) },
                 containerColor = MaterialTheme.colorScheme.primary
             )
         },
@@ -105,6 +105,9 @@ fun ShiftManagerScreen(navController: NavController, viewModel: BioSecureViewMod
                                 editingShift = shift
                                 showAddShiftSheet = true
                             },
+                            onDelete = {
+                                viewModel?.deleteShift(shift.id)
+                            },
                             onAssign = {
                                 selectedShiftForAssignment = shift
                                 showAssignUserSheet = true
@@ -121,7 +124,7 @@ fun ShiftManagerScreen(navController: NavController, viewModel: BioSecureViewMod
             shift = editingShift,
             onDismiss = { showAddShiftSheet = false },
             onSave = { name, start, end, tolerance ->
-                viewModel?.saveShift(name, start, tolerance, end)
+                viewModel?.saveShift(name, start, tolerance, end, editingShift?.id ?: "")
                 showAddShiftSheet = false
             }
         )
@@ -140,7 +143,7 @@ fun ShiftManagerScreen(navController: NavController, viewModel: BioSecureViewMod
 }
 
 @Composable
-fun ShiftItemCard(shift: Shift, employeeCount: Int, onEdit: () -> Unit, onAssign: () -> Unit) {
+fun ShiftItemCard(shift: Shift, employeeCount: Int, onEdit: () -> Unit, onDelete: () -> Unit, onAssign: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -177,6 +180,13 @@ fun ShiftItemCard(shift: Shift, employeeCount: Int, onEdit: () -> Unit, onAssign
                         Icons.Default.Edit,
                         contentDescription = "Editar",
                         tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Eliminar",
+                        tint = MaterialTheme.colorScheme.error
                     )
                 }
 
@@ -272,7 +282,7 @@ fun AddShiftBottomSheet(
             ) {
                 val chipColors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    selectedLabelColor = Color.White
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                 )
                 FilterChip(
                     selected = name == "Tiempo Completo",
@@ -362,7 +372,7 @@ fun AddShiftBottomSheet(
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             ) {
                 Text("Guardar Horario", fontWeight = FontWeight.Bold, fontSize = 16.sp)

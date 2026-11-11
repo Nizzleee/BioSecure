@@ -15,6 +15,10 @@ android {
     namespace = "com.biosecure.app"
     compileSdk = 36
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId = "com.biosecure.app"
         minSdk = 26
@@ -24,11 +28,15 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["MAPS_API_KEY"] = localProperties.getProperty("MAPS_API_KEY", "")
+buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${localProperties.getProperty("GOOGLE_WEB_CLIENT_ID", "")}\"")
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Firma con la misma llave que depuración para poder actualizar la
+            // app instalada sin desinstalar, pero sin android:debuggable.
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -41,6 +49,10 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+
+    androidResources {
+        noCompress += "tflite"
     }
 }
 
@@ -60,8 +72,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.fragment.ktx)
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.gson)
     implementation(libs.coil.compose)
 
     // Biometric, CameraX, ML Kit
@@ -71,6 +81,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.face.detection)
+    implementation(libs.tensorflow.lite)
 
     // Firebase
     implementation(platform(libs.firebase.bom))
@@ -100,6 +111,7 @@ dependencies {
     implementation(libs.maps.compose)
     implementation(libs.play.services.maps)
     implementation(libs.play.services.location)
+implementation("com.google.android.gms:play-services-auth:20.7.0")
 
     // Lottie
     implementation(libs.lottie.compose)

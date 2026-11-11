@@ -49,7 +49,12 @@ fun EditEmployeeScreen(
     var cargo by remember { mutableStateOf("") }
     var department by remember { mutableStateOf("") }
     var photoUrl by remember { mutableStateOf("") }
+    var selectedSedeId by remember { mutableStateOf("") }
+    var selectedShiftId by remember { mutableStateOf("") }
     var isInitialized by remember { mutableStateOf(false) }
+
+    val sedes by (viewModel?.sedes ?: MutableStateFlow(emptyList<com.biosecure.app.data.model.Sede>())).collectAsState()
+    val shifts by (viewModel?.shifts ?: MutableStateFlow(emptyList<com.biosecure.app.data.model.Shift>())).collectAsState()
 
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -58,6 +63,11 @@ fun EditEmployeeScreen(
             photoUrl = it.toString()
             viewModel?.updateUserPhoto(userId, it.toString())
         }
+    }
+
+    LaunchedEffect(viewModel?.currentCompanyId?.value) {
+        val cid = viewModel?.currentCompanyId?.value
+        if (!cid.isNullOrEmpty()) viewModel?.loadCompanyConfig(cid)
     }
 
     LaunchedEffect(users, userId) {
@@ -70,6 +80,8 @@ fun EditEmployeeScreen(
                 cargo = user.cargo
                 department = user.department
                 photoUrl = user.image
+                selectedSedeId = user.sedeId
+                selectedShiftId = user.shiftId
                 isInitialized = true
             }
         }
@@ -167,7 +179,7 @@ fun EditEmployeeScreen(
                     Icon(
                         imageVector = Icons.Default.CameraAlt,
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -203,12 +215,14 @@ fun EditEmployeeScreen(
             )
             OutlinedTextField(
                 value = email,
-                onValueChange = { email = it },
-                label = { Text("Email") },
+                onValueChange = { },
+                label = { Text("Email (no editable)") },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = fieldColors,
-                singleLine = true
+                singleLine = true,
+                readOnly = true,
+                supportingText = { Text("El correo no se puede modificar") }
             )
             OutlinedTextField(
                 value = cargo,
@@ -229,6 +243,108 @@ fun EditEmployeeScreen(
                 singleLine = true
             )
 
+            // Sede
+            Text(
+                text = "Sede",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            if (sedes.isEmpty()) {
+                Text(
+                    text = "No hay sedes disponibles",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                var expandedSede by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(
+                    expanded = expandedSede,
+                    onExpandedChange = { expandedSede = it }
+                ) {
+                    OutlinedTextField(
+                        value = sedes.find { it.id == selectedSedeId }?.nombre ?: "Seleccionar sede",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Sede") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedSede) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = fieldColors,
+                        singleLine = true
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedSede,
+                        onDismissRequest = { expandedSede = false }
+                    ) {
+                        sedes.forEach { sede ->
+                            DropdownMenuItem(
+                                text = { Text(sede.nombre) },
+                                onClick = {
+                                    selectedSedeId = sede.id
+                                    expandedSede = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Turno
+            Text(
+                text = "Turno",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            if (shifts.isEmpty()) {
+                Text(
+                    text = "No hay turnos disponibles",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                var expandedShift by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(
+                    expanded = expandedShift,
+                    onExpandedChange = { expandedShift = it }
+                ) {
+                    OutlinedTextField(
+                        value = shifts.find { it.id == selectedShiftId }?.name ?: "Seleccionar turno",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Turno") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedShift) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = fieldColors,
+                        singleLine = true
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedShift,
+                        onDismissRequest = { expandedShift = false }
+                    ) {
+                        shifts.forEach { shift ->
+                            DropdownMenuItem(
+                                text = { Text("${shift.name} (${shift.startTime}-${shift.endTime})") },
+                                onClick = {
+                                    selectedShiftId = shift.id
+                                    expandedShift = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             Button(
                 onClick = {
                     viewModel?.updateEmployee(
@@ -239,6 +355,12 @@ fun EditEmployeeScreen(
                         cargo.trim(),
                         department.trim()
                     )
+                    if (selectedSedeId.isNotEmpty() && selectedSedeId != (users.find { it.uid == userId }?.sedeId ?: "")) {
+                        viewModel?.assignSedeToEmployee(userId, selectedSedeId)
+                    }
+                    if (selectedShiftId.isNotEmpty() && selectedShiftId != (users.find { it.uid == userId }?.shiftId ?: "")) {
+                        viewModel?.assignShiftToEmployee(userId, selectedShiftId)
+                    }
                 },
                 enabled = isFormValid && !isSaving,
                 modifier = Modifier
