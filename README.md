@@ -33,8 +33,9 @@
 9. [Estructura del proyecto](#9-estructura-del-proyecto)
 10. [Flujo completo de la app](#10-flujo-completo-de-la-app)
 11. [Base de datos Firestore](#11-base-de-datos-firestore)
-12. [Próximamente](#12-próximamente)
-13. [Equipo](#13-equipo)
+12. [Actualización Beta 03](#12-actualización-beta-03)
+13. [Próximamente](#13-próximamente)
+14. [Equipo](#14-equipo)
 
 ---
 
@@ -603,7 +604,27 @@ service cloud.firestore {
 
 ---
 
-## 12. Próximamente
+## 12. Actualización Beta 03
+
+Novedades incorporadas en la rama `merge/beta03-app` (ya en `master`):
+
+- **Marcaje 100% en cliente:** facial local (cosine 0.70), huella dactilar y GPS <= 50 m.
+- **Enrolamiento facial** con plantilla almacenada en Firestore (`vectors [{v:[...]}]`).
+- **Panel admin corregido:** sin duplicados al editar sede/turno, borrado real, email no editable.
+- **Login con Google** + foto de perfil.
+- **Empleados en tiempo real** (`addSnapshotListener`).
+- **Cambio de contraseña** desde Ajustes.
+- **Admin asigna sede/turno** a empleados desde `EditEmployeeScreen`.
+- **Google Maps funcional** (API key real).
+- **Historial** con refresh manual + pull-to-refresh.
+- **Transiciones suaves** (fade, sin línea blanca).
+- **Widget de escritorio** (admin/empleado).
+- **Reglas de Firestore** actualizadas y pruebas de reglas/funciones.
+- Lint y build: `BUILD SUCCESSFUL`.
+
+---
+
+## 13. Próximamente
 
 | Funcionalidad | Prioridad | Descripción |
 |---|---|---|
@@ -616,7 +637,7 @@ service cloud.firestore {
 
 ---
 
-## 13. Equipo
+## 14. Equipo
 
 | Nombre | Rol |
 |---|---|
