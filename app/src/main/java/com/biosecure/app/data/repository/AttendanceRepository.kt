@@ -246,13 +246,20 @@ class AttendanceRepository(context: Context) {
         } catch (e: Exception) { emptyList() }
     }
 
-    suspend fun saveSede(companyId: String, sede: Sede): Boolean = try {
-        api.saveSede(auth(), mapOf(
+    suspend fun saveSede(companyId: String, sede: Sede): Result<Unit> = try {
+        val response = api.saveSede(auth(), mapOf(
             "id" to (sede.id.ifBlank { UUID.randomUUID().toString() }),
             "companyId" to companyId, "nombre" to sede.nombre, "lat" to sede.lat, "lng" to sede.lng,
             "radioMetros" to sede.radioMetros, "activa" to sede.activa
-        )).ok
-    } catch (e: Exception) { false }
+        ))
+        if (response.ok && response.data != null) {
+            Result.success(Unit)
+        } else {
+            Result.failure(Exception(response.error ?: "El servidor no confirmó la sede"))
+        }
+    } catch (e: Exception) {
+        Result.failure(Exception("No se pudo conectar con el servidor: ${e.message ?: "error desconocido"}"))
+    }
 
     suspend fun assignSedeToEmployee(uid: String, sedeId: String): Boolean = try {
         api.updateUser(auth(), uid, mapOf("sedeId" to sedeId)).ok

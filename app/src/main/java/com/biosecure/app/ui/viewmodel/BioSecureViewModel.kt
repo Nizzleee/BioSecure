@@ -1,5 +1,6 @@
 package com.biosecure.app.ui.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -10,6 +11,7 @@ import com.biosecure.app.data.model.ConfirmationData
 import com.biosecure.app.data.model.CompanyRequest
 import com.biosecure.app.data.model.CreateUserRequest
 import com.biosecure.app.data.model.ScanType
+import com.biosecure.app.data.model.Sede
 import com.biosecure.app.data.model.UpdateUserRequest
 import com.biosecure.app.data.model.User
 import com.biosecure.app.data.network.AttendanceRequest
@@ -255,19 +257,46 @@ class BioSecureViewModel(
         }
     }
 
-    fun saveSede(nombre: String, lat: Double, lng: Double, radio: Int) {
+    fun clearError() { _error.value = null }
+
+    fun saveSede(
+        nombre: String,
+        lat: Double,
+        lng: Double,
+        radio: Int,
+        sedeId: String? = null,
+        onResult: ((Boolean) -> Unit)? = null
+    ) {
         val companyId = _currentCompanyId.value
-        if (companyId.isEmpty()) return
+        if (companyId.isEmpty()) {
+            val message = "No hay empresa activa. Cerrá sesión y volvé a ingresar."
+            _error.value = message
+            Log.e("BioSecure", "saveSede: $message")
+            onResult?.invoke(false)
+            return
+        }
 
         viewModelScope.launch {
             _isLoading.value = true
-            val sede = com.biosecure.app.data.model.Sede(nombre = nombre, lat = lat, lng = lng, radioMetros = radio)
-            val success = attendanceRepository.saveSede(companyId, sede)
-            if (success) {
-                _sedes.value = attendanceRepository.getSedes(companyId)
-            } else {
-                _error.value = "Error al guardar la sede"
-            }
+            _error.value = null
+            val sede = Sede(
+                id = sedeId.orEmpty(),
+                nombre = nombre,
+                lat = lat,
+                lng = lng,
+                radioMetros = radio
+            )
+            attendanceRepository.saveSede(companyId, sede)
+                .onSuccess {
+                    _sedes.value = attendanceRepository.getSedes(companyId)
+                    onResult?.invoke(true)
+                }
+                .onFailure { error ->
+                    val message = error.message ?: "Error al guardar la sede"
+                    _error.value = message
+                    Log.e("BioSecure", "saveSede: $message")
+                    onResult?.invoke(false)
+                }
             _isLoading.value = false
         }
     }

@@ -49,9 +49,11 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
     val sedes by (viewModel?.sedes ?: MutableStateFlow(emptyList<Sede>())).collectAsState()
     val isLoading by (viewModel?.isLoading ?: MutableStateFlow(false)).collectAsState()
     val companyId by (viewModel?.currentCompanyId ?: MutableStateFlow("")).collectAsState()
+    val errorMessage by (viewModel?.error ?: MutableStateFlow(null)).collectAsState()
 
     var showSheet by remember { mutableStateOf(false) }
     var selectedSede by remember { mutableStateOf<Sede?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(companyId) {
         if (companyId.isNotEmpty() && sedes.isEmpty()) {
@@ -59,7 +61,15 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
         }
     }
 
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel?.clearError()
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Gestión de Sedes", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
@@ -135,12 +145,14 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
     }
 
     if (showSheet) {
+        val editingId = selectedSede?.id
         SedeEditorBottomSheet(
             sede = selectedSede,
             onDismiss = { showSheet = false },
             onSave = { nombre, lat, lng, radio ->
-                viewModel?.saveSede(nombre, lat, lng, radio)
-                showSheet = false
+                viewModel?.saveSede(nombre, lat, lng, radio, editingId) { saved ->
+                    if (saved) showSheet = false
+                } ?: run { showSheet = false }
             }
         )
     }

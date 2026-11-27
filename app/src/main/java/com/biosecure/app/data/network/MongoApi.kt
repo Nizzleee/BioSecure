@@ -8,6 +8,7 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
+import kotlin.jvm.JvmSuppressWildcards
 
 /** Respuesta estándar del backend BioSecure (MongoDB). */
 data class ApiResponse<T>(
@@ -124,10 +125,10 @@ interface MongoApi {
     suspend fun getUsers(@Header("Authorization") auth: String, @Query("companyId") companyId: String? = null, @Query("role") role: String? = null): ApiResponse<List<ApiUser>>
 
     @POST("api/users")
-    suspend fun createUser(@Header("Authorization") auth: String, @Body user: Map<String, Any?>): ApiResponse<ApiUser>
+    suspend fun createUser(@Header("Authorization") auth: String, @Body user: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ApiUser>
 
     @PUT("api/users/{uid}")
-    suspend fun updateUser(@Header("Authorization") auth: String, @Path("uid") uid: String, @Body data: Map<String, Any?>): ApiResponse<ApiUser>
+    suspend fun updateUser(@Header("Authorization") auth: String, @Path("uid") uid: String, @Body data: Map<String, @JvmSuppressWildcards Any>): ApiResponse<ApiUser>
 
     @DELETE("api/users/{uid}")
     suspend fun deleteUser(@Header("Authorization") auth: String, @Path("uid") uid: String): ApiResponse<Boolean>
@@ -136,19 +137,19 @@ interface MongoApi {
     suspend fun getCompany(@Header("Authorization") auth: String, @Path("id") id: String): ApiResponse<CompanyDto>
 
     @PUT("api/companies/{id}")
-    suspend fun updateCompany(@Header("Authorization") auth: String, @Path("id") id: String, @Body data: Map<String, Any?>): ApiResponse<CompanyDto>
+    suspend fun updateCompany(@Header("Authorization") auth: String, @Path("id") id: String, @Body data: Map<String, @JvmSuppressWildcards Any>): ApiResponse<CompanyDto>
 
     @GET("api/companies/{id}/shifts")
     suspend fun getShifts(@Header("Authorization") auth: String, @Path("id") id: String): ApiResponse<List<ShiftDto>>
 
     @PUT("api/companies/{id}/shifts")
-    suspend fun saveShifts(@Header("Authorization") auth: String, @Path("id") id: String, @Body body: Map<String, Any>): ApiResponse<List<ShiftDto>>
+    suspend fun saveShifts(@Header("Authorization") auth: String, @Path("id") id: String, @Body body: Map<String, @JvmSuppressWildcards Any>): ApiResponse<List<ShiftDto>>
 
     @GET("api/sedes")
     suspend fun getSedes(@Header("Authorization") auth: String, @Query("companyId") companyId: String): ApiResponse<List<SedeDto>>
 
     @POST("api/sedes")
-    suspend fun saveSede(@Header("Authorization") auth: String, @Body sede: Map<String, Any?>): ApiResponse<SedeDto>
+    suspend fun saveSede(@Header("Authorization") auth: String, @Body sede: Map<String, @JvmSuppressWildcards Any>): ApiResponse<SedeDto>
 
     @DELETE("api/sedes/{id}")
     suspend fun deleteSede(@Header("Authorization") auth: String, @Path("id") id: String): ApiResponse<Boolean>
@@ -163,5 +164,5 @@ interface MongoApi {
     suspend fun confirmAttendance(@Header("Authorization") auth: String, @Path("id") id: String): ApiResponse<AttendanceDto>
 
     @GET("api/notifications")
-    suspend fun getNotifications(@Header("Authorization") auth: String): ApiResponse<List<Map<String, Any>>>
+    suspend fun getNotifications(@Header("Authorization") auth: String): ApiResponse<List<Map<String, @JvmSuppressWildcards Any>>>
 }
