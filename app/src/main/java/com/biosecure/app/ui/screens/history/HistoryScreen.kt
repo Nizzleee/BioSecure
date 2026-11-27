@@ -255,13 +255,13 @@ fun HistoryScreen(navController: NavController, isAdmin: Boolean = false, viewMo
                                 Text(
                                     text = if (lang == "en") "Activity Summary" else "Resumen de Actividad",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = White.copy(alpha = 0.7f)
+                                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "${records.size} ${if (lang == "en") "records found" else "registros encontrados"}",
                                     style = MaterialTheme.typography.titleLarge,
-                                    color = White,
+                                    color = MaterialTheme.colorScheme.onPrimary,
                                     fontWeight = FontWeight.Bold
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -271,7 +271,7 @@ fun HistoryScreen(navController: NavController, isAdmin: Boolean = false, viewMo
                                     Text(
                                         text = "${records.count { it.status == AttendanceStatus.EXITOSO || it.status == AttendanceStatus.PUNTUAL }} ${if (lang == "en") "successful attendances" else "asistencias exitosas"}",
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = White.copy(alpha = 0.85f)
+                                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
                                     )
                                 }
                             }

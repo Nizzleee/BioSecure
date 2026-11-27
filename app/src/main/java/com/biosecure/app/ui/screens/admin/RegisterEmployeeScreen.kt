@@ -390,9 +390,9 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
                 )
             ) {
                 if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = White, strokeWidth = 2.dp)
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                 } else {
-                    Text(text = "Registrar Empleado", color = White, fontWeight = FontWeight.SemiBold)
+                    Text(text = "Registrar Empleado", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.SemiBold)
                 }
             }
 

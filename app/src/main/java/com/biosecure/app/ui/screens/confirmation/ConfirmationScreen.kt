@@ -182,7 +182,7 @@ private fun AdminConfirmedContent(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
-            Text(text = "VOLVER AL PANEL", color = White, fontWeight = FontWeight.SemiBold)
+            Text(text = "VOLVER AL PANEL", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.SemiBold)
         }
     }
 }

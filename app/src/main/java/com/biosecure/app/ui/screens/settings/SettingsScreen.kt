@@ -275,7 +275,7 @@ fun SettingsScreen(
                                 checked = notifications,
                                 onCheckedChange = { viewModel?.setNotificationsEnabled(it) },
                                 colors = SwitchDefaults.colors(
-                                    checkedThumbColor = White,
+                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                                     checkedTrackColor = Teal
                                 )
                             )
@@ -341,7 +341,7 @@ fun SettingsScreen(
                                 checked = isDarkMode,
                                 onCheckedChange = { onDarkModeChange(it) },
                                 colors = SwitchDefaults.colors(
-                                    checkedThumbColor = White,
+                                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                                     checkedTrackColor = Teal
                                 )
                             )

@@ -172,7 +172,7 @@ fun EditEmployeeScreen(
                     Icon(
                         imageVector = Icons.Default.CameraAlt,
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -258,13 +258,13 @@ fun EditEmployeeScreen(
                 if (isSaving) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
-                        color = White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         strokeWidth = 2.dp
                     )
                 } else {
                     Text(
                         text = "Guardar cambios",
-                        color = White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         fontWeight = FontWeight.SemiBold
                     )
                 }

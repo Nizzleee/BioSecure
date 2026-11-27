@@ -57,8 +57,8 @@ fun ShiftManagerScreen(navController: NavController, viewModel: BioSecureViewMod
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { editingShift = null; showAddShiftSheet = true },
-                icon = { Icon(Icons.Default.Add, null, tint = Color.White) },
-                text = { Text("Nuevo Horario", color = Color.White) },
+                icon = { Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.onPrimary) },
+                text = { Text("Nuevo Horario", color = MaterialTheme.colorScheme.onPrimary) },
                 containerColor = MaterialTheme.colorScheme.primary
             )
         },
@@ -250,7 +250,7 @@ fun AddShiftBottomSheet(
             ) {
                 val chipColors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    selectedLabelColor = Color.White
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
                 )
                 FilterChip(
                     selected = name == "Tiempo Completo",
@@ -315,7 +315,7 @@ fun AddShiftBottomSheet(
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             ) {
                 Text("Guardar Horario", fontWeight = FontWeight.Bold, fontSize = 16.sp)

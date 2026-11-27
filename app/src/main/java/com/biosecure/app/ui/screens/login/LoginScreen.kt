@@ -95,14 +95,14 @@ fun LoginScreen(navController: NavController, viewModel: BioSecureViewModel? = n
         focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
         unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
         focusedIndicatorColor = MaterialTheme.colorScheme.primary,
-        unfocusedIndicatorColor = Color.White.copy(alpha = 0.5f),
+        unfocusedIndicatorColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
         focusedLabelColor = MaterialTheme.colorScheme.primary,
-        unfocusedLabelColor = Color.White.copy(alpha = 0.7f),
+        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
         cursorColor = MaterialTheme.colorScheme.primary,
-        focusedPlaceholderColor = Color.White.copy(alpha = 0.7f),
-        unfocusedPlaceholderColor = Color.White.copy(alpha = 0.7f),
+        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
         focusedTrailingIconColor = MaterialTheme.colorScheme.primary,
-        unfocusedTrailingIconColor = Color.White.copy(alpha = 0.7f)
+        unfocusedTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
     )
 
     Box(
@@ -128,13 +128,13 @@ fun LoginScreen(navController: NavController, viewModel: BioSecureViewModel? = n
                 Text(
                     text = "BioSecure",
                     style = MaterialTheme.typography.headlineLarge,
-                    color = White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = if (lang == "en") "Biometric Attendance System" else "Sistema de Asistencia Biométrica",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.85f)
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
                 )
             }
         }
@@ -168,7 +168,7 @@ fun LoginScreen(navController: NavController, viewModel: BioSecureViewModel? = n
                         email = it
                         viewModel?.clearAuthError()
                     },
-                    label = { Text(if (lang == "en") "Email" else "Correo electrónico", color = Color.White.copy(alpha = 0.8f)) },
+                    label = { Text(if (lang == "en") "Email" else "Correo electrónico", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     singleLine = true,
@@ -184,7 +184,7 @@ fun LoginScreen(navController: NavController, viewModel: BioSecureViewModel? = n
                         password = it
                         viewModel?.clearAuthError()
                     },
-                    label = { Text(if (lang == "en") "Password" else "Contraseña", color = Color.White.copy(alpha = 0.8f)) },
+                    label = { Text(if (lang == "en") "Password" else "Contraseña", color = MaterialTheme.colorScheme.onSurfaceVariant) },
                     visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -230,13 +230,13 @@ fun LoginScreen(navController: NavController, viewModel: BioSecureViewModel? = n
                     if (isLoading) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
-                            color = White,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             strokeWidth = 2.dp
                         )
                     } else {
                         Text(
                             text = if (lang == "en") "Sign In" else "Iniciar Sesión",
-                            color = White,
+                            color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.SemiBold
                         )
                     }

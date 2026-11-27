@@ -330,7 +330,7 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                                    contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                    contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
                                 ),
                                 elevation = ButtonDefaults.buttonElevation(0.dp)
                             ) {

@@ -85,17 +85,17 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { selectedSede = null; showSheet = true },
-                icon = { Icon(Icons.Default.Add, null, tint = Color.White) },
+                icon = { Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.onPrimary) },
                 text = {
                     Text(
                         "Nueva Sede",
-                        color = Color.White,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 elevation = FloatingActionButtonDefaults.elevation(8.dp)
             )
         }
@@ -403,14 +403,14 @@ fun SedeEditorBottomSheet(
                 enabled = nombre.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = Color.White
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             ) {
-                Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(18.dp), tint = Color.White)
+                Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimary)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "Guardar Configuración",
-                    color = Color.White,
+                    color = MaterialTheme.colorScheme.onPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )

@@ -265,7 +265,7 @@ fun DashboardScreen(navController: NavController, viewModel: BioSecureViewModel?
                                     Spacer(Modifier.width(6.dp))
                                     Text(
                                         text = if (lang == "en") "History" else "Historial",
-                                        color = White,
+                                        color = MaterialTheme.colorScheme.onSecondary,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
