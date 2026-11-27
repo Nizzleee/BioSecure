@@ -233,7 +233,7 @@ const routes = {
     const q = {};
     if (url.searchParams.get("companyId")) q.companyId = url.searchParams.get("companyId");
     if (url.searchParams.get("role")) q.role = url.searchParams.get("role");
-    if (a.role !== "admin") q._id = a.uid;
+    if (a.role !== "admin") q._id = idMatch(a.uid);
     const list = await Users.find(q).sort({ name: 1 }).lean();
     ok(res, list.map(publicUser));
   },
