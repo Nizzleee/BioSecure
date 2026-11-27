@@ -12,6 +12,8 @@ const PORT = Number(process.env.PORT || 3001);
 const MONGO_URI = process.env.MONGODB_URI ||
   "mongodb+srv://sapm3006_db_user:sergioponce1234@cluster0.kssppg3.mongodb.net/biosecure?retryWrites=true&w=majority";
 const JWT_SECRET = process.env.AUTH_SECRET || "biosecure-dev-secret-cambiar-en-produccion-2026";
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ||
+  "103319710145-f2dd8416d5j060uue01mquo09n5n1pt8.apps.googleusercontent.com";
 
 // ---------------------------------------------------------------- auth utils
 const b64u = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -183,8 +185,8 @@ const routes = {
       if (!info.ok || !claims.email || claims.email_verified !== "true") {
         return fail(res, 401, "Token de Google inválido o no verificado", "INVALID_GOOGLE_TOKEN");
       }
-      const expected = process.env.GOOGLE_CLIENT_ID || "";
-      if (expected && claims.aud !== expected) {
+      const expected = GOOGLE_CLIENT_ID;
+      if (claims.aud !== expected) {
         return fail(res, 401, "El token no pertenece a esta aplicación", "INVALID_GOOGLE_AUDIENCE");
       }
       const email = String(claims.email).toLowerCase();
@@ -243,6 +245,7 @@ const routes = {
     const email = String(b.email || "").trim().toLowerCase();
     if (!email || !b.password) return fail(res, 400, "Email y contraseña son obligatorios", "INVALID_ARGUMENT");
     if (String(b.password).length < 6) return fail(res, 400, "La contraseña debe tener al menos 6 caracteres", "WEAK_PASSWORD");
+    if (b.companyId && b.companyId !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
     if (await Users.findOne({ email })) return fail(res, 409, "Ya existe un usuario con ese correo", "EMAIL_IN_USE");
     const uid = String(b.uid || crypto.randomUUID());
     const user = {
@@ -251,7 +254,7 @@ const routes = {
       name: b.name || `${b.firstName || ""} ${b.lastName || ""}`.trim() || email,
       firstName: b.firstName || "", lastName: b.lastName || "",
       department: b.department || "", cargo: b.cargo || "",
-      companyId: b.companyId || a.companyId, shiftId: b.shiftId || "",
+      companyId: a.companyId, shiftId: b.shiftId || "",
       sedeId: b.sedeId || "", image: b.image || "", isActive: b.isActive !== false,
       createdAt: new Date(),
     };
@@ -267,8 +270,12 @@ const routes = {
       ? ["name", "firstName", "lastName", "email", "department", "cargo", "shiftId", "sedeId", "isActive", "role", "companyId", "image"]
       : ["name", "firstName", "lastName", "email", "image"];
     if (!isAdmin && uid !== a.uid) return fail(res, 403, "Sólo puedes editar tu propio perfil", "PERMISSION_DENIED");
+    const target = await Users.findOne({ _id: idMatch(uid) }).lean();
+    if (!target) return fail(res, 404, "Usuario no encontrado", "NOT_FOUND");
+    if (isAdmin && target.companyId !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
     const set = {};
     for (const k of allowed) if (k in b && typeof b[k] !== "object") set[k] = b[k];
+    if (isAdmin && set.companyId && set.companyId !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
     if (isAdmin && b.password && String(b.password).length >= 6) set.passwordHash = hashPassword(b.password);
     if (!Object.keys(set).length) return fail(res, 400, "No hay campos editables", "INVALID_ARGUMENT");
     const u = await Users.findOneAndUpdate({ _id: idMatch(uid) }, { $set: set }, { new: true });
@@ -277,6 +284,9 @@ const routes = {
   },
   "DELETE /api/users/:uid": async (req, res, uid) => {
     const a = requireAdmin(req, res); if (!a) return;
+    const target = await Users.findOne({ _id: idMatch(uid) }).lean();
+    if (!target) return fail(res, 404, "Usuario no encontrado", "NOT_FOUND");
+    if (target.companyId !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
     await Users.deleteOne({ _id: idMatch(uid) });
     ok(res, true);
   },
@@ -284,12 +294,14 @@ const routes = {
   // ---- COMPANY / SHIFTS ----
   "GET /api/companies/:id": async (req, res, id) => {
     const a = requireAuth(req, res); if (!a) return;
+    if (id !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
     const c = await Companies.findOne({ _id: idMatch(id) }).lean();
     if (!c) return fail(res, 404, "Empresa no encontrada", "NOT_FOUND");
     ok(res, c);
   },
   "PUT /api/companies/:id": async (req, res, id) => {
     const a = requireAdmin(req, res); if (!a) return;
+    if (id !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
     const b = await readBody(req);
     const allowed = ["name", "horaEntrada", "toleranciaMin", "timezone", "geoFence", "checkInStart", "checkInEnd"];
     const set = {};
@@ -299,11 +311,13 @@ const routes = {
   },
   "GET /api/companies/:id/shifts": async (req, res, id) => {
     const a = requireAuth(req, res); if (!a) return;
+    if (id !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
     const list = await Shifts.find({ companyId: id }).lean();
     ok(res, list.map(s => ({ ...s, id: String(s._id), _id: String(s._id) })));
   },
   "PUT /api/companies/:id/shifts": async (req, res, id) => {
     const a = requireAdmin(req, res); if (!a) return;
+    if (id !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
     const { shifts } = await readBody(req);
     if (!Array.isArray(shifts)) return fail(res, 400, "shifts debe ser una lista", "INVALID_ARGUMENT");
     // Normaliza ids: un turno sin id nunca debe poder asignarse a un empleado.
@@ -325,14 +339,20 @@ const routes = {
   "GET /api/sedes": async (req, res) => {
     const a = requireAuth(req, res); if (!a) return;
     const url = new URL(req.url, "http://localhost");
-    const q = url.searchParams.get("companyId") ? { companyId: url.searchParams.get("companyId") } : {};
+    const requested = url.searchParams.get("companyId");
+    const q = {};
+    if (a.role !== "admin") {
+      if (requested && requested !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
+      q.companyId = a.companyId;
+    } else if (requested) q.companyId = requested;
     ok(res, await Sedes.find(q).lean());
   },
   "POST /api/sedes": async (req, res) => {
     const a = requireAdmin(req, res); if (!a) return;
     const b = await readBody(req);
     const id = String(b.id || b._id || crypto.randomUUID());
-    const doc = { _id: id, id, companyId: b.companyId || a.companyId, nombre: b.nombre || "Sede",
+    if (b.companyId && b.companyId !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
+    const doc = { _id: id, id, companyId: a.companyId, nombre: b.nombre || "Sede",
       lat: Number(b.lat), lng: Number(b.lng), radioMetros: Number(b.radioMetros || 100),
       activa: b.activa !== false, creadaEn: new Date() };
     await Sedes.updateOne({ _id: id }, { $set: doc }, { upsert: true });
@@ -340,7 +360,10 @@ const routes = {
   },
   "DELETE /api/sedes/:id": async (req, res, id) => {
     const a = requireAdmin(req, res); if (!a) return;
-    await Sedes.deleteOne({ _id: id });
+    const sede = await Sedes.findOne({ _id: idMatch(id) }).lean();
+    if (!sede) return fail(res, 404, "Sede no encontrada", "NOT_FOUND");
+    if (sede.companyId !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
+    await Sedes.deleteOne({ _id: idMatch(id) });
     ok(res, true);
   },
 
@@ -454,15 +477,6 @@ const routes = {
 
   // ---- HEALTH / SEED ----
   "GET /api/health": async (req, res) => ok(res, { status: "ok", db: mongoose.connection.readyState, time: new Date().toISOString() }),
-  "POST /api/seed/passwords": async (req, res) => {
-    const b = await readBody(req);
-    const email = String(b.email || "").toLowerCase();
-    const u = await Users.findOne({ email });
-    if (!u) return fail(res, 404, "Usuario no encontrado", "NOT_FOUND");
-    u.passwordHash = hashPassword(b.password || "123456");
-    await u.save();
-    ok(res, { uid: String(u._id), email: u.email });
-  },
 };
 
 // ---------------------------------------------------------------- server
