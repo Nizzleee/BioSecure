@@ -63,7 +63,12 @@ object FaceTemplateStore {
         }
     }
 
-    fun hasTemplate(uid: String): Boolean = prefs(requireContext()).contains(prefKey(uid))
+    /** Sólo cuenta como inscrita si la plantilla se puede descifrar y tiene 192 dimensiones. */
+    fun hasTemplate(uid: String): Boolean {
+        if (!prefs(requireContext()).contains(prefKey(uid))) return false
+        val template = loadTemplate(uid) ?: return false
+        return template.size == 192
+    }
 
     fun saveTemplate(uid: String, embedding: FloatArray) {
         val plain = ByteArray(embedding.size * 4)

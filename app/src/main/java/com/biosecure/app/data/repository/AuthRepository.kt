@@ -109,7 +109,7 @@ class AuthRepository(context: Context) {
         }
     }
 
-    fun isLoggedIn(): Boolean = !session.token.isNullOrBlank()
+    fun isLoggedIn(): Boolean = !session.token.isNullOrBlank() && !session.isTokenExpired()
 
     fun logout() {
         session.clear()

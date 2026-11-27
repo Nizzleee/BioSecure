@@ -62,6 +62,7 @@ fun DashboardScreen(navController: NavController, viewModel: BioSecureViewModel?
     val selectedSedeFromVm by (viewModel?.selectedSedeId ?: MutableStateFlow<String?>(null)).collectAsState()
     val attendanceHistory by (viewModel?.attendanceHistoryFlow ?: MutableStateFlow(emptyList())).collectAsState()
     val companyId by (viewModel?.currentCompanyId ?: MutableStateFlow("")).collectAsState()
+    val errorMessage by (viewModel?.error ?: MutableStateFlow<String?>(null)).collectAsState()
 
     val lang = LocalAppLanguage.current
     var showManualDialog by remember { mutableStateOf(false) }
@@ -71,6 +72,13 @@ fun DashboardScreen(navController: NavController, viewModel: BioSecureViewModel?
     var filterSedeId by remember { mutableStateOf<String?>(null) }
     var statsVisible by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel?.clearError()
+        }
+    }
 
     LaunchedEffect(sedeId, companyId) {
         viewModel?.setSelectedSede(sedeId)
@@ -87,8 +95,8 @@ fun DashboardScreen(navController: NavController, viewModel: BioSecureViewModel?
             sedes = sedes,
             search = manualSearch,
             onSearchChange = { manualSearch = it },
-            onUserSelected = { user ->
-                viewModel?.registerManualAttendance(user)
+            onUserSelected = { user, sede ->
+                viewModel?.registerManualAttendance(user, sede)
                 showManualDialog = false
                 manualSearch = ""
             },
@@ -731,7 +739,7 @@ private fun ManualAttendanceDialog(
     sedes: List<com.biosecure.app.data.model.Sede>,
     search: String,
     onSearchChange: (String) -> Unit,
-    onUserSelected: (User) -> Unit,
+    onUserSelected: (User, com.biosecure.app.data.model.Sede?) -> Unit,
     onDismiss: () -> Unit
 ) {
     val lang = LocalAppLanguage.current
@@ -835,7 +843,9 @@ private fun ManualAttendanceDialog(
                     } else {
                         filtered.take(6).forEach { user ->
                             Card(
-                                onClick = { onUserSelected(user) },
+                                onClick = {
+                                    onUserSelected(user, sedes.find { it.id == selectedSedeId })
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(8.dp),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)

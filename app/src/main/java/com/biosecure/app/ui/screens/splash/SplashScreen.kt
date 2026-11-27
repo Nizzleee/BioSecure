@@ -49,9 +49,7 @@ fun SplashScreen(
             )
         }
         delay(2000L)
-        if (authRepository?.isLoggedIn() == true) {
-            viewModel?.refreshSession()
-            delay(500)
+        if (authRepository?.isLoggedIn() == true && viewModel?.refreshSession() == true) {
             val role = authRepository.getRoleForCurrentUser()
             viewModel?.setRole(role ?: "employee")
             val destination = if (role == "admin") Screen.AdminSedes.route else Screen.EmployeeScan.route
@@ -59,6 +57,7 @@ fun SplashScreen(
                 popUpTo(Screen.Splash.route) { inclusive = true }
             }
         } else {
+            authRepository?.logout()
             navController.navigate(Screen.Login.route) {
                 popUpTo(Screen.Splash.route) { inclusive = true }
             }

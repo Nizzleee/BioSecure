@@ -316,13 +316,13 @@ class BioSecureViewModel(
         }
     }
 
-    fun saveShift(name: String, startTime: String, toleranceMin: Int, endTime: String) {
+    fun saveShift(name: String, startTime: String, toleranceMin: Int, endTime: String, shiftId: String = "") {
         val companyId = _currentCompanyId.value
         if (companyId.isEmpty()) return
 
         viewModelScope.launch {
             _isLoading.value = true
-            val shift = com.biosecure.app.data.model.Shift(name = name, startTime = startTime, toleranceMin = toleranceMin, endTime = endTime)
+            val shift = com.biosecure.app.data.model.Shift(id = shiftId, name = name, startTime = startTime, toleranceMin = toleranceMin, endTime = endTime)
             val success = attendanceRepository.saveShift(companyId, shift)
             if (success) {
                 _shifts.value = attendanceRepository.getShifts(companyId)
@@ -336,8 +336,9 @@ class BioSecureViewModel(
     fun saveShifts(companyId: String, shifts: List<com.biosecure.app.data.model.Shift>) {
         viewModelScope.launch {
             _isLoading.value = true
-            shifts.forEach { shift -> attendanceRepository.saveShift(companyId, shift) }
+            val ok = attendanceRepository.replaceShifts(companyId, shifts)
             _shifts.value = attendanceRepository.getShifts(companyId)
+            if (!ok) _error.value = "Error al guardar los horarios"
             _isLoading.value = false
         }
     }
@@ -400,33 +401,33 @@ class BioSecureViewModel(
         }
     }
 
-    fun refreshSession() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                authRepository.getCurrentUserResult().onSuccess { result ->
-                    _currentUserName.value = result.name
-                    _currentUserUid.value = result.user.uid
-                    _currentCompanyId.value = result.companyId
-                    _currentRole.value = result.role
+    /** Devuelve false si el token dejó de ser válido; en ese caso limpia la sesión local. */
+    suspend fun refreshSession(): Boolean {
+        _isLoading.value = true
+        return try {
+            val result = authRepository.getCurrentUserResult().getOrThrow()
+            _currentUserName.value = result.name
+            _currentUserUid.value = result.user.uid
+            _currentCompanyId.value = result.companyId
+            _currentRole.value = result.role
 
-                    _currentUser.value = User(
-                        uid = result.user.uid,
-                        firstName = result.name.split(" ").firstOrNull() ?: "",
-                        lastName = result.name.split(" ").lastOrNull() ?: "",
-                        email = result.user.email ?: "",
-                        role = result.role,
-                        companyId = result.companyId,
-                        image = result.image
-                    )
-
-                    loadCompanyConfig(result.companyId)
-                }
-            } catch (e: Exception) {
-                _error.value = "Error al restaurar sesión: ${e.message}"
-            } finally {
-                _isLoading.value = false
-            }
+            _currentUser.value = User(
+                uid = result.user.uid,
+                firstName = result.name.split(" ").firstOrNull() ?: "",
+                lastName = result.name.split(" ").lastOrNull() ?: "",
+                email = result.user.email ?: "",
+                role = result.role,
+                companyId = result.companyId,
+                image = result.image
+            )
+            loadCompanyConfig(result.companyId)
+            true
+        } catch (e: Exception) {
+            authRepository.logout()
+            _error.value = "Sesión expirada. Inicia sesión nuevamente."
+            false
+        } finally {
+            _isLoading.value = false
         }
     }
 
@@ -561,12 +562,16 @@ class BioSecureViewModel(
         }
     }
 
-    fun registerAttendance(qrToken: String, lat: Double, lng: Double, onResult: (Boolean, String?) -> Unit = { _, _ -> }) {
+    fun registerAttendance(
+        qrToken: String, lat: Double, lng: Double,
+        accuracy: Double = 50.0, tipo: String? = null,
+        onResult: (Boolean, String?) -> Unit = { _, _ -> }
+    ) {
         viewModelScope.launch {
             _isLoading.value = true
             val currentSedeId = _selectedSedeId.value
 
-            functionsRepository.registerAttendance(qrToken, lat, lng, currentSedeId)
+            functionsRepository.registerAttendance(qrToken, lat, lng, currentSedeId, accuracy, tipo)
                 .onSuccess { resultData ->
                     _authSuccess.value = "Asistencia registrada: ${resultData["status"]}"
 
@@ -574,7 +579,9 @@ class BioSecureViewModel(
                         userName = resultData["userName"] as? String ?: "Empleado",
                         checkIn = resultData["checkIn"] as? String ?: SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()),
                         date = resultData["date"] as? String ?: SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()),
-                        scanType = ScanType.QR.name,
+                        scanType = (resultData["scanType"] as? String)?.uppercase()
+                            ?.takeIf { it in ScanType.values().map { s -> s.name } }
+                            ?: if (qrToken == _currentUserUid.value && tipo == "FACIAL") ScanType.FACIAL.name else ScanType.QR.name,
                         status = resultData["status"] as? String ?: "TARDANZA"
                     )
                     onResult(true, null)
@@ -613,7 +620,11 @@ class BioSecureViewModel(
         }
     }
 
-    fun registerManualAttendance(user: User) {
+    fun registerManualAttendance(user: User, sede: Sede?) {
+        if (sede == null) {
+            _error.value = "Selecciona una sede para el registro manual"
+            return
+        }
         val now = Date()
         val timeFormatter = SimpleDateFormat("HH:mm", Locale.getDefault())
         val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
@@ -624,28 +635,35 @@ class BioSecureViewModel(
             id = (nextAttendanceId++).toString(),
             userId = user.uid,
             companyId = user.companyId,
-            sedeId = user.sedeId,
+            sedeId = sede.id.ifBlank { user.sedeId },
             userName = userName,
             userImage = user.image,
             date = date,
             checkIn = checkIn,
             checkOut = "",
             status = AttendanceStatus.EXITOSO,
-            type = ScanType.QR
+            type = ScanType.QR,
+            location = sede.nombre,
+            latitude = sede.lat,
+            longitude = sede.lng
         )
-        _lastConfirmation.value = ConfirmationData(
-            userName = userName,
-            checkIn = checkIn,
-            date = date,
-            scanType = ScanType.QR.name
-        )
-        _attendances.value = _attendances.value + attendance
         viewModelScope.launch {
-            try {
-                attendanceRepository.saveAttendance(attendance)
-            } catch (e: Exception) {
-                _error.value = "Error al registrar asistencia: ${e.message}"
-            }
+            _isLoading.value = true
+            attendanceRepository.saveAttendance(attendance)
+                .onSuccess {
+                    _lastConfirmation.value = ConfirmationData(
+                        userName = userName,
+                        checkIn = checkIn,
+                        date = date,
+                        scanType = ScanType.QR.name,
+                        location = sede.nombre
+                    )
+                    _attendances.value = _attendances.value + attendance
+                }
+                .onFailure { error ->
+                    _error.value = "Error al registrar asistencia: ${error.message}"
+                }
+            _isLoading.value = false
         }
     }
 

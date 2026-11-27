@@ -4,6 +4,7 @@
  */
 import { createRequire } from "node:module";
 import crypto from "node:crypto";
+import fs from "node:fs";
 
 const require = createRequire("D:/TRabajo-web-main/package.json");
 const mongoose = require("mongoose");
@@ -11,7 +12,19 @@ const mongoose = require("mongoose");
 const PORT = Number(process.env.PORT || 3001);
 const MONGO_URI = process.env.MONGODB_URI ||
   "mongodb+srv://sapm3006_db_user:sergioponce1234@cluster0.kssppg3.mongodb.net/biosecure?retryWrites=true&w=majority";
-const JWT_SECRET = process.env.AUTH_SECRET || "biosecure-dev-secret-cambiar-en-produccion-2026";
+/** Secreto de firma: se genera una vez y se guarda fuera del repo si no se define AUTH_SECRET. */
+const secretFile = new URL("./.auth-secret", import.meta.url);
+const loadSecret = () => {
+  if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
+  try {
+    const saved = fs.readFileSync(secretFile, "utf8").trim();
+    if (saved) return saved;
+  } catch { /* primera ejecución */ }
+  const generated = crypto.randomBytes(48).toString("base64url");
+  try { fs.writeFileSync(secretFile, generated, { mode: 0o600 }); } catch { /* solo lectura */ }
+  return generated;
+};
+const JWT_SECRET = loadSecret();
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ||
   "103319710145-f2dd8416d5j060uue01mquo09n5n1pt8.apps.googleusercontent.com";
 
@@ -80,9 +93,29 @@ const attendanceStatus = (hhMm, shift, earlyMinutes = 60) => {
   const start = hhMmToMinutes(shift.startTime);
   const end = hhMmToMinutes(shift.endTime);
   const tol = Number(shift.toleranceMin ?? 15);
+  const overnight = end <= start;
+  if (overnight) {
+    // Turno nocturno: la ventana válida cruza la medianoche.
+    const elapsed = (now - start + 1440) % 1440;
+    if (elapsed > 1440 - earlyMinutes) throw new Error("Fuera de ventana: demasiado temprano");
+    const duration = (end - start + 1440) % 1440;
+    return elapsed > duration + tol ? "TARDANZA" : "PUNTUAL";
+  }
   if (now < start - earlyMinutes) throw new Error("Fuera de ventana: demasiado temprano");
   if (now > end + tol) return "TARDANZA";
   return "PUNTUAL";
+};
+/** Ajusta una hora a la "jornada" del check-in para turnos que cruzan medianoche. */
+const minutesInShiftDay = (hhMm, checkIn, shift) => {
+  const now = hhMmToMinutes(hhMm);
+  const start = hhMmToMinutes(shift.startTime);
+  const end = hhMmToMinutes(shift.endTime);
+  if (end <= start) {
+    const inMin = hhMmToMinutes(checkIn);
+    if (inMin >= start && now < start) return now + 1440;
+    if (inMin < start && now >= start) return now - 1440;
+  }
+  return now;
 };
 
 // ---------------------------------------------------------------- mongoose schemas
@@ -275,6 +308,14 @@ const routes = {
     if (isAdmin && target.companyId !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
     const set = {};
     for (const k of allowed) if (k in b && typeof b[k] !== "object") set[k] = b[k];
+    if (set.email) {
+      set.email = String(set.email).trim().toLowerCase();
+      if (!set.email) return fail(res, 400, "Email inválido", "INVALID_ARGUMENT");
+      if (set.email !== String(target.email || "").toLowerCase()) {
+        const dup = await Users.findOne({ email: set.email }).lean();
+        if (dup && String(dup._id) !== String(uid)) return fail(res, 409, "Ya existe un usuario con ese correo", "EMAIL_IN_USE");
+      }
+    }
     if (isAdmin && set.companyId && set.companyId !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
     if (isAdmin && b.password && String(b.password).length >= 6) set.passwordHash = hashPassword(b.password);
     if (!Object.keys(set).length) return fail(res, 400, "No hay campos editables", "INVALID_ARGUMENT");
@@ -421,35 +462,74 @@ const routes = {
     if (!shift) return fail(res, 400, "El turno asignado no existe", "NO_SHIFT_ASSIGNED");
 
     const t = serverTime(company.timezone || "America/Lima");
-    const docId = `${targetUid}_${t.yyyyMmDd}`;
-    const existing = await Attendances.findOne({ _id: idMatch(docId) }).lean();
+    const startMin = hhMmToMinutes(shift.startTime);
+    const endMin = hhMmToMinutes(shift.endTime);
+    const overnight = endMin <= startMin;
+    const explicitOut = String(b.tipo || "").toUpperCase() === "CHECK_OUT";
+    const scanType = targetUid === a.uid ? (b.tipo === "FACIAL" ? "FACIAL" : "HUELLA") : "QR";
+
+    let docId = `${targetUid}_${t.yyyyMmDd}`;
+    let existing = await Attendances.findOne({ _id: idMatch(docId) }).lean();
+    if (!existing && overnight && t.minutes < startMin) {
+      // Madrugada de un turno nocturno: la jornada empezó el día anterior.
+      const tz = company.timezone || "America/Lima";
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit"
+      }).formatToParts(new Date(Date.now() - 864e5));
+      const p = Object.fromEntries(parts.filter(x => x.type !== "literal").map(x => [x.type, x.value]));
+      const yesterdayId = `${targetUid}_${p.year}${p.month}${p.day}`;
+      const candidate = await Attendances.findOne({ _id: idMatch(yesterdayId) }).lean();
+      if (candidate && !candidate.checkOut && t.minutes <= endMin + 120) {
+        existing = candidate;
+        docId = yesterdayId;
+      }
+    }
     let response;
 
-    if (!existing) {
+    if (existing) {
+      const base = {
+        status: existing.status || "EXITOSO", date: existing.date, userName: existing.userName,
+        targetUid, scanType: existing.type || scanType
+      };
+      if (existing.checkOut) {
+        response = { ...base, checkIn: existing.checkIn, checkOut: existing.checkOut, type: "COMPLETE", alreadyComplete: true };
+      } else {
+        const inMin = hhMmToMinutes(existing.checkIn);
+        const nowInShiftDay = minutesInShiftDay(t.hhMm, existing.checkIn, shift);
+        const allowOut = explicitOut || (overnight && t.minutes < startMin);
+        if (!allowOut || nowInShiftDay < inMin + 5) {
+          // Reintento tras pérdida de red o doble pulsación: devolver la entrada original.
+          response = { ...base, checkIn: existing.checkIn, type: "CHECK_IN", duplicate: true };
+        } else {
+          const limit = overnight ? endMin + 1440 + 120 : endMin + 120;
+          if (nowInShiftDay > limit) return fail(res, 400, "OUT_OF_WINDOW: excede horas extra permitidas", "OUT_OF_WINDOW");
+          await Attendances.updateOne({ _id: idMatch(docId) }, { $set: { checkOut: t.hhMm, updatedAt: new Date() } });
+          response = { ...base, checkIn: existing.checkIn, checkOut: t.hhMm, type: "CHECK_OUT" };
+        }
+      }
+    } else {
       let status;
       try { status = attendanceStatus(t.hhMm, shift, 60); } catch (e) { return fail(res, 400, e.message, "OUT_OF_WINDOW"); }
-      const type = targetUid === a.uid ? (b.tipo === "FACIAL" ? "FACIAL" : "HUELLA") : "QR";
       const doc = {
         _id: docId, uid: targetUid, userId: targetUid, userName: target.name || "Empleado",
         companyId, sedeId: target.sedeId, date: t.date, checkIn: t.hhMm, checkOut: "",
-        status, type, location: sede.nombre || "Sede", latitude: lat, longitude: lng,
+        status, type: scanType, location: sede.nombre || "Sede", latitude: lat, longitude: lng,
         accuracy, distanceMeters: Math.round(distance), requestId, marcadoPor: a.uid,
         createdAt: new Date(), updatedAt: new Date(),
       };
       await Attendances.create(doc);
       await Notifications.create({ _id: crypto.randomUUID(), companyId, type: "attendance",
         userName: target.name || "Empleado", checkIn: t.hhMm, timestamp: new Date(), read: false });
-      response = { status, checkIn: t.hhMm, date: t.date, userName: target.name, type: "CHECK_IN" };
-    } else {
-      if (existing.checkOut) return fail(res, 400, "ALREADY_COMPLETE: Entrada y salida ya registradas hoy", "ALREADY_COMPLETE");
-      const inMin = hhMmToMinutes(existing.checkIn);
-      if (t.minutes < inMin + 5) return fail(res, 400, "TOO_SOON: Deben transcurrir 5 min desde el check-in", "TOO_SOON");
-      const endMin = hhMmToMinutes(shift.endTime);
-      if (t.minutes > endMin + 120) return fail(res, 400, "OUT_OF_WINDOW: excede horas extra permitidas", "OUT_OF_WINDOW");
-      await Attendances.updateOne({ _id: docId }, { $set: { checkOut: t.hhMm, updatedAt: new Date() } });
-      response = { status: existing.status || "EXITOSO", checkIn: existing.checkIn, checkOut: t.hhMm,
-        date: existing.date, userName: existing.userName, type: "CHECK_OUT" };
+      response = { status, checkIn: t.hhMm, date: t.date, userName: target.name,
+        targetUid, scanType, type: "CHECK_IN" };
     }
+    // Idempotencia real: aunque el cliente genere otro requestId al reintentar,
+    // se devuelve la misma respuesta de ese marcado.
+    const cached = await Idempotency.findOne({
+      uid: a.uid, "response.targetUid": targetUid, "response.date": response.date,
+      "response.checkIn": response.checkIn, "response.type": response.type
+    }).lean();
+    if (cached) return ok(res, cached.response);
     await Idempotency.create({ _id: requestId, uid: a.uid, response, expiresAt: new Date(Date.now() + 7 * 864e5) });
     console.log(JSON.stringify({ event: "ATTENDANCE_PROCESSED", companyId, type: response.type, status: response.status, distanceMeters: Math.round(distance), requestId }));
     ok(res, response);

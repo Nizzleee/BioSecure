@@ -234,6 +234,16 @@ class AttendanceRepository(context: Context) {
         } catch (e: Exception) { false }
     }
 
+    /** Reemplaza la lista completa (también elimina los turnos que ya no están). */
+    suspend fun replaceShifts(companyId: String, shifts: List<Shift>): Boolean {
+        return try {
+            api.saveShifts(auth(), companyId, mapOf("shifts" to shifts.map {
+                mapOf("id" to it.id, "name" to it.name, "startTime" to it.startTime,
+                    "endTime" to it.endTime, "toleranceMin" to it.toleranceMin)
+            })).ok
+        } catch (e: Exception) { false }
+    }
+
     suspend fun getSedes(companyId: String): List<Sede> {
         return try {
             val r = api.getSedes(auth(), companyId)

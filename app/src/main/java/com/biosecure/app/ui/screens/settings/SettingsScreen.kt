@@ -349,6 +349,15 @@ fun SettingsScreen(
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
                         SettingsItem(
+                            icon = "✨",
+                            title = if (language == "en") "Gemini API Key" else "Clave Gemini",
+                            onClick = {
+                                apiKeyEditValue = geminiApiKey
+                                showApiKeyDialog = true
+                            }
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                        SettingsItem(
                             icon = "🆘",
                             title = if (language == "en") "Help & Support" else "Ayuda y Soporte",
                             onClick = {

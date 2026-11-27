@@ -162,14 +162,16 @@ fun QRScannerScreen(navController: NavController, viewModel: BioSecureViewModel?
                                     statusText = "QR detectado, registrando..."
 
                                     scope.launch {
-                                        val loc = LocationProvider.current(context)
+                                        val loc = LocationProvider.currentFix(context)
                                         if (loc == null) {
-                                            statusText = "Activa la ubicación (GPS) y concede permiso para registrar"
+                                            statusText = "Activa la ubicación y espera una señal GPS precisa (≤50 m)"
                                             isProcessing = false
                                             hasScanned.set(false)
                                             return@launch
                                         }
-                                        viewModel?.registerAttendance(scannedToken, loc.first, loc.second) { success, errorMsg ->
+                                        viewModel?.registerAttendance(
+                                            scannedToken, loc.latitude, loc.longitude, loc.accuracy.toDouble()
+                                        ) { success, errorMsg ->
                                             if (success) {
                                                 statusText = "Asistencia registrada ✅"
                                                 navController.navigate(Screen.Confirmation.route) {

@@ -5,12 +5,16 @@ import com.biosecure.app.data.network.RegisterAttendanceRequest
 import com.biosecure.app.data.network.RegisterAttendanceResult
 import com.biosecure.app.data.network.RetrofitInstance
 import com.biosecure.app.data.prefs.SessionStore
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
-/** Reemplaza a las Firebase Functions using la API MongoDB. */
+/** Reemplaza a las Firebase Functions usando la API MongoDB. */
 class FunctionsRepository(context: Context) {
     private val session = SessionStore(context)
     private val api = RetrofitInstance.mongoApi
+    private val pendingRequestIds = mutableMapOf<String, String>()
 
     suspend fun setUserClaims(uid: String, role: String, companyId: String): Result<Boolean> = try {
         val r = api.updateUser(session.authHeader(), uid, mapOf("role" to role, "companyId" to companyId))
@@ -20,20 +24,29 @@ class FunctionsRepository(context: Context) {
     /** En Mongo el QR contiene directamente el uid del empleado. */
     suspend fun issueCheckInToken(): Result<String> = Result.success(session.uid ?: "")
 
-    suspend fun registerAttendance(qrToken: String, lat: Double, lng: Double, sedeId: String?): Result<Map<String, Any>> {
+    suspend fun registerAttendance(
+        qrToken: String, lat: Double, lng: Double, sedeId: String?,
+        accuracy: Double = 50.0, tipo: String? = null
+    ): Result<Map<String, Any>> {
         return try {
+            val effectiveType = tipo ?: if (qrToken == session.uid) "HUELLA" else "QR"
+            // Un reintento por pérdida de red reutiliza el mismo requestId.
+            val key = "$qrToken|${SimpleDateFormat("yyyyMMdd", Locale.getDefault()).format(Date())}|${sedeId ?: ""}"
+            val requestId = pendingRequestIds.getOrPut(key) { UUID.randomUUID().toString() }
             val r = api.registerAttendance(session.authHeader(), RegisterAttendanceRequest(
-                tipo = if (qrToken == session.uid) "HUELLA" else "QR",
+                tipo = effectiveType,
                 qrToken = qrToken,
                 lat = lat, lng = lng,
-                accuracy = 50.0,
-                requestId = UUID.randomUUID().toString()
+                accuracy = accuracy,
+                requestId = requestId
             ))
             if (!r.ok || r.data == null) return Result.failure(Exception(r.error ?: "Error al registrar"))
+            pendingRequestIds.remove(key)
             val d: RegisterAttendanceResult = r.data!!
             Result.success(mapOf(
                 "status" to d.status, "checkIn" to d.checkIn, "checkOut" to d.checkOut,
-                "date" to d.date, "userName" to d.userName, "type" to d.type
+                "date" to d.date, "userName" to d.userName, "type" to d.type,
+                "scanType" to d.scanType.ifBlank { effectiveType }
             ))
         } catch (e: Exception) {
             Result.failure(Exception(serverError(e)))

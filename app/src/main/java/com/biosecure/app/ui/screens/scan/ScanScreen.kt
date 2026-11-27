@@ -102,6 +102,8 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
     var showConfirmDialog by remember { mutableStateOf(false) }
     var pendingLat by remember { mutableStateOf(0.0) }
     var pendingLng by remember { mutableStateOf(0.0) }
+    var pendingAccuracy by remember { mutableStateOf(50.0) }
+    var pendingTipo by remember { mutableStateOf("HUELLA") }
 
     val currentUserUid by (viewModel?.currentUserUid
         ?: kotlinx.coroutines.flow.MutableStateFlow<String?>(null)).collectAsState()
@@ -118,20 +120,22 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
 
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-    fun registerWithLocation(onResult: (Boolean) -> Unit) {
+    fun registerWithLocation(tipo: String, onResult: (Boolean) -> Unit) {
         if (!hasLocationPermission) {
             locationLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
             scanStatus = "Activa la ubicación y concede permiso para registrar asistencia"
             return
         }
         scope.launch {
-            val loc = LocationProvider.current(context)
+            val loc = LocationProvider.currentFix(context)
             if (loc == null) {
-                scanStatus = "Activa la ubicación (GPS) para registrar asistencia"
+                scanStatus = "Activa la ubicación y espera una señal GPS precisa (≤50 m)"
                 return@launch
             }
-            pendingLat = loc.first
-            pendingLng = loc.second
+            pendingLat = loc.latitude
+            pendingLng = loc.longitude
+            pendingAccuracy = loc.accuracy.toDouble()
+            pendingTipo = tipo
             showConfirmDialog = true
         }
     }
@@ -145,7 +149,7 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                     super.onAuthenticationSucceeded(result)
                     scanSuccess = true
                     scanStatus = "¡Biométrica verificada!"
-                    registerWithLocation {}
+                    registerWithLocation("HUELLA") {}
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
@@ -223,12 +227,14 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                     onClick = {
                         showConfirmDialog = false
                         val uid = currentUserUid ?: ""
-                        viewModel?.registerAttendance(uid, pendingLat, pendingLng) { success, _ ->
+                        viewModel?.registerAttendance(
+                            uid, pendingLat, pendingLng, pendingAccuracy, pendingTipo
+                        ) { success, errorMsg ->
                             if (success) {
                                 navController.navigate(Screen.Confirmation.route)
                             } else {
                                 scanSuccess = false
-                                scanStatus = "Error al registrar asistencia"
+                                scanStatus = errorMsg ?: "Error al registrar asistencia"
                             }
                         }
                     },
@@ -481,13 +487,16 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                                         FaceRecognitionManager.embed(bitmap)
                                     }
                                     val stored = FaceTemplateStore.loadTemplate(uid)
-                                    val distance = stored?.let {
-                                        FaceRecognitionManager.distance(embedding, it)
-                                    } ?: Float.MAX_VALUE
+                                    if (stored == null) {
+                                        faceEnrolled = false
+                                        scanStatus = "Plantilla facial inválida. Vuelve a inscribir tu rostro."
+                                        return@launch
+                                    }
+                                    val distance = FaceRecognitionManager.distance(embedding, stored)
                                     if (distance <= FaceRecognitionManager.MATCH_THRESHOLD) {
                                         scanSuccess = true
                                         scanStatus = "Rostro verificado ✅"
-                                        registerWithLocation {}
+                                        registerWithLocation("FACIAL") {}
                                     } else {
                                         scanStatus = "Rostro no reconocido"
                                     }

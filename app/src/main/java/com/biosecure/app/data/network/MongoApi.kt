@@ -73,7 +73,8 @@ data class RegisterAttendanceResult(
     val checkOut: String = "",
     val date: String = "",
     val userName: String = "",
-    val type: String = ""
+    val type: String = "",
+    val scanType: String = ""
 )
 
 data class SedeDto(

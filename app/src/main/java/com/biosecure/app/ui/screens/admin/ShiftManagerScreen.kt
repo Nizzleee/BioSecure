@@ -114,7 +114,8 @@ fun ShiftManagerScreen(navController: NavController, viewModel: BioSecureViewMod
             shift = editingShift,
             onDismiss = { showAddShiftSheet = false },
             onSave = { name, start, end, tolerance ->
-                viewModel?.saveShift(name, start, tolerance, end)
+                viewModel?.saveShift(name, start, tolerance, end, editingShift?.id.orEmpty())
+                editingShift = null
                 showAddShiftSheet = false
             }
         )
