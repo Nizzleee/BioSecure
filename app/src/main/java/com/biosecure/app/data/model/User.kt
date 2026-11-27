@@ -11,7 +11,6 @@ data class User(
     val cargo: String = "",
     val department: String = "",
     val companyId: String = "",
-    val fcmToken: String = "",
     val isActive: Boolean = true,
     val shiftId: String = "",
     val sedeId: String = ""

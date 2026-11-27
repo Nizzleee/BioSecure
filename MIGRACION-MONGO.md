@@ -36,18 +36,23 @@ mongodb+srv://sapm3006_db_user:sergioponce1234@cluster0.kssppg3.mongodb.net/bios
 - `CompanyRepository` → REST.
 - Widget → lee estado desde la API.
 - Notificaciones → locales (FCM eliminado).
-- Subida de foto de perfil → desactivada temporalmente (Firebase Storage eliminado).
+- Subida de foto de perfil → imagen comprimida y guardada en `users.image` (MongoDB), sin Firebase Storage.
+- Errores REST → el cliente muestra el `code`/`error` real del backend, no mensajes genéricos.
+- Turnos → se leen/escriben en la colección `shifts` y se sincronizan con `company.shifts`; IDs generados siempre.
 
 ## Endpoints
 ```
 POST   /api/auth/login
+POST   /api/auth/google
 GET    /api/auth/me
+POST   /api/auth/logout
 GET    /api/users?companyId=&role=
 POST   /api/users
 PUT    /api/users/:uid
 DELETE /api/users/:uid
 GET    /api/companies/:id
 PUT    /api/companies/:id
+GET    /api/companies/:id/shifts
 PUT    /api/companies/:id/shifts
 GET    /api/sedes?companyId=
 POST   /api/sedes
