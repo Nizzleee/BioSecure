@@ -1,7 +1,10 @@
 package com.biosecure.app.data.repository
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Base64
 import com.biosecure.app.data.model.Attendance
 import com.biosecure.app.data.model.AttendanceStatus
 import com.biosecure.app.data.model.Company
@@ -15,6 +18,7 @@ import com.biosecure.app.data.prefs.SessionStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,6 +26,7 @@ import java.util.UUID
 
 /** Repositorio de datos 100% MongoDB (sin Firestore). */
 class AttendanceRepository(context: Context) {
+    private val appContext = context.applicationContext
     private val session = SessionStore(context)
     private val api = RetrofitInstance.mongoApi
     private fun auth() = session.authHeader()
@@ -168,8 +173,27 @@ class AttendanceRepository(context: Context) {
         api.updateUser(auth(), uid, mapOf("image" to imageUrl)).ok
     } catch (e: Exception) { false }
 
-    /** Firebase Storage ya no se usa; se deja el contrato para no romper la UI. */
-    suspend fun uploadUserPhoto(uid: String, uri: Uri): String? = null
+    /**
+     * Reemplaza a Firebase Storage: comprime la imagen y la guarda como data URI
+     * en users.image (MongoDB). Así sobrevive al reinicio y funciona sin Storage.
+     */
+    suspend fun uploadUserPhoto(uid: String, uri: Uri): String? {
+        return try {
+            val input = appContext.contentResolver.openInputStream(uri) ?: return null
+            val original = BitmapFactory.decodeStream(input) ?: return null
+            input.close()
+            val maxSide = 640
+            val scale = minOf(1f, maxSide.toFloat() / maxOf(original.width, original.height))
+            val bitmap = if (scale < 1f) Bitmap.createScaledBitmap(
+                original, (original.width * scale).toInt().coerceAtLeast(1),
+                (original.height * scale).toInt().coerceAtLeast(1), true
+            ) else original
+            val out = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 75, out)
+            val encoded = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+            if (encoded.length > 1_500_000) null else "data:image/jpeg;base64,$encoded"
+        } catch (e: Exception) { null }
+    }
 
     suspend fun assignShiftToEmployee(uid: String, shiftId: String): Boolean = try {
         api.updateUser(auth(), uid, mapOf("shiftId" to shiftId)).ok
@@ -177,13 +201,22 @@ class AttendanceRepository(context: Context) {
 
     suspend fun getShifts(companyId: String): List<Shift> {
         return try {
-            val r = api.getCompany(auth(), companyId)
-            (r.data?.shifts ?: emptyList()).map { s ->
+            val r = api.getShifts(auth(), companyId)
+            val fromApi = (r.data ?: emptyList()).map { s ->
                 Shift(
                     id = s.id ?: s._id ?: "", name = s.name ?: "",
                     startTime = s.startTime ?: "08:00", endTime = s.endTime ?: "17:00",
                     toleranceMin = s.toleranceMin ?: 15
                 )
+            }
+            // Compatibilidad con empresas que aún tienen los turnos dentro del documento.
+            if (fromApi.isNotEmpty()) fromApi else {
+                val c = api.getCompany(auth(), companyId).data
+                (c?.shifts ?: emptyList()).map { s ->
+                    Shift(id = s.id ?: s._id ?: "", name = s.name ?: "",
+                        startTime = s.startTime ?: "08:00", endTime = s.endTime ?: "17:00",
+                        toleranceMin = s.toleranceMin ?: 15)
+                }
             }
         } catch (e: Exception) { emptyList() }
     }
@@ -191,8 +224,9 @@ class AttendanceRepository(context: Context) {
     suspend fun saveShift(companyId: String, shift: Shift): Boolean {
         return try {
             val current = getShifts(companyId).toMutableList()
-            val idx = current.indexOfFirst { it.id == shift.id }
-            if (idx >= 0) current[idx] = shift else current.add(shift)
+            val fixed = if (shift.id.isBlank()) shift.copy(id = UUID.randomUUID().toString()) else shift
+            val idx = current.indexOfFirst { it.id == fixed.id }
+            if (idx >= 0) current[idx] = fixed else current.add(fixed)
             api.saveShifts(auth(), companyId, mapOf("shifts" to current.map {
                 mapOf("id" to it.id, "name" to it.name, "startTime" to it.startTime,
                     "endTime" to it.endTime, "toleranceMin" to it.toleranceMin)

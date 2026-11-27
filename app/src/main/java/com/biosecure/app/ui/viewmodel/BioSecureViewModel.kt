@@ -229,7 +229,8 @@ class BioSecureViewModel(
                         role = data["role"] as? String ?: "employee",
                         isActive = data["isActive"] as? Boolean ?: true,
                         shiftId = data["shiftId"] as? String ?: "",
-                        sedeId = data["sedeId"] as? String ?: ""
+                        sedeId = data["sedeId"] as? String ?: "",
+                        image = data["image"] as? String ?: ""
                     )
                 }
             } catch (e: Exception) {
@@ -550,46 +551,14 @@ class BioSecureViewModel(
                     onResult(true, null)
                 }
                 .onFailure { error ->
-                    val errorMsg = error.message ?: ""
-                    if (errorMsg.contains("NOT_FOUND") || !qrToken.contains(".")) {
-                        val success = registerAttendanceDirect(qrToken, lat, lng, currentSedeId)
-                        onResult(success, if (success) null else "Este empleado ya puso asistencia hoy")
-                    } else {
-                        val msg = when {
-                            errorMsg.contains("ALREADY_EXISTS") -> "Este código QR ya fue utilizado."
-                            errorMsg.contains("ALREADY_REGISTERED") -> "Este empleado ya puso asistencia hoy"
-                            else -> "Error: Fuera de rango o tiempo"
-                        }
-                        _error.value = msg
-                        onResult(false, msg)
-                    }
+                    // El backend ya devuelve el motivo exacto (error/code); no reintentamos
+                    // ni mostramos un mensaje genérico que oculte la causa real.
+                    val msg = error.message?.ifBlank { "Error al registrar asistencia" }
+                        ?: "Error al registrar asistencia"
+                    _error.value = msg
+                    onResult(false, msg)
                 }
             _isLoading.value = false
-        }
-    }
-
-    private suspend fun registerAttendanceDirect(uid: String, lat: Double, lng: Double, sedeId: String?): Boolean {
-        return try {
-            functionsRepository.registerAttendance(uid, lat, lng, sedeId).fold(
-                onSuccess = { data ->
-                    _lastConfirmation.value = ConfirmationData(
-                        userName = data["userName"] as? String ?: _currentUserName.value.ifEmpty { "Empleado" },
-                        checkIn = data["checkIn"] as? String ?: SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date()),
-                        date = data["date"] as? String ?: SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date()),
-                        scanType = ScanType.QR.name,
-                        status = data["status"] as? String ?: "TARDANZA"
-                    )
-                    _authSuccess.value = "Asistencia registrada correctamente"
-                    true
-                },
-                onFailure = { e ->
-                    _error.value = e.message ?: "Error al registrar asistencia"
-                    false
-                }
-            )
-        } catch (e: Exception) {
-            _error.value = "Error al guardar: ${e.message}"
-            false
         }
     }
 

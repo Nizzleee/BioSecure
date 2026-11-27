@@ -19,11 +19,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.biosecure.app.ui.components.navigateTab
 import com.biosecure.app.ui.components.swipeToNavigate
 import com.biosecure.app.ui.navigation.Screen
@@ -45,6 +47,8 @@ fun SettingsScreen(
     val context = LocalContext.current
     val notifications by (viewModel?.notificationsEnabled ?: MutableStateFlow(true)).collectAsState()
     val currentUserName by (viewModel?.currentUserName ?: MutableStateFlow("")).collectAsState()
+    val currentUser by (viewModel?.currentUser
+        ?: MutableStateFlow<com.biosecure.app.data.model.User?>(null)).collectAsState()
     val geminiApiKey by (viewModel?.geminiApiKey ?: MutableStateFlow("")).collectAsState()
     val displayName = currentUserName.ifEmpty { if (isAdmin) "Admin" else "Empleado" }
     var showEditNameDialog by remember { mutableStateOf(false) }
@@ -100,7 +104,17 @@ fun SettingsScreen(
                         .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(text = if (isAdmin) "👨‍💼" else "👤", fontSize = 40.sp)
+                    val photo = currentUser?.image.orEmpty()
+                    if (photo.isNotBlank()) {
+                        AsyncImage(
+                            model = photo,
+                            contentDescription = "Foto de perfil",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Text(text = if (isAdmin) "👨‍💼" else "👤", fontSize = 40.sp)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))

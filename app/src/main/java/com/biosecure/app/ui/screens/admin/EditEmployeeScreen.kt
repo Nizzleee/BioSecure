@@ -55,7 +55,8 @@ fun EditEmployeeScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let {
-            photoUrl = it.toString()
+            // El URI content:// no es persistente: el viewModel lo sube y guarda
+            // en Mongo; la URL resultante se refleja desde users.
             viewModel?.updateUserPhoto(userId, it.toString())
         }
     }
@@ -73,6 +74,10 @@ fun EditEmployeeScreen(
                 isInitialized = true
             }
         }
+    }
+
+    LaunchedEffect(users.firstOrNull { it.uid == userId }?.image) {
+        users.firstOrNull { it.uid == userId }?.let { photoUrl = it.image }
     }
 
     LaunchedEffect(lastUpdatedUserId) {

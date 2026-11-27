@@ -99,6 +99,7 @@ class AuthRepository(context: Context) {
             }
             val user = resp.data!!.toLoginResult()
             session.uid = user.user.uid
+            session.email = user.user.email ?: ""
             session.role = user.role
             session.companyId = user.companyId
             session.name = user.name

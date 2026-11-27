@@ -94,6 +94,16 @@ const Attendances = mongoose.model("AttendanceBs", col("attendances"));
 const Notifications = mongoose.model("NotificationBs", col("notifications"));
 const Idempotency = mongoose.model("IdempotencyBs", col("idempotency_keys"));
 
+/**
+ * Los _id pueden ser ObjectId (semilla inicial) o strings (creados por la app).
+ * Como el esquema usa Mixed, Mongoose no hace casting: buscamos ambas formas.
+ */
+const idMatch = (value) => {
+  const s = String(value);
+  if (mongoose.Types.ObjectId.isValid(s)) return { $in: [s, new mongoose.Types.ObjectId(s)] };
+  return s;
+};
+
 // ---------------------------------------------------------------- response helpers
 const send = (res, status, body) => {
   res.writeHead(status, {
@@ -199,7 +209,7 @@ const routes = {
         if (claims.given_name && !u.firstName) set.firstName = claims.given_name;
         if (claims.family_name && !u.lastName) set.lastName = claims.family_name;
         if (Object.keys(set).length) await Users.updateOne({ _id: u._id }, { $set: set });
-        u = await Users.findById(u._id).lean();
+        u = await Users.findOne({ _id: idMatch(u._id) }).lean();
       }
       const user = publicUser(u);
       const token = sign({ uid: user.uid, role: user.role, companyId: user.companyId, exp: Date.now() + 7 * 24 * 3600 * 1000 });
@@ -210,7 +220,7 @@ const routes = {
   },
   "GET /api/auth/me": async (req, res) => {
     const a = requireAuth(req, res); if (!a) return;
-    const u = await Users.findById(a.uid);
+    const u = await Users.findOne({ _id: idMatch(a.uid) });
     if (!u) return fail(res, 404, "Usuario no encontrado", "NOT_FOUND");
     ok(res, publicUser(u));
   },
@@ -249,26 +259,32 @@ const routes = {
     ok(res, publicUser(user));
   },
   "PUT /api/users/:uid": async (req, res, uid) => {
-    const a = requireAdmin(req, res); if (!a) return;
+    const a = requireAuth(req, res); if (!a) return;
     const b = await readBody(req);
-    const allowed = ["name", "firstName", "lastName", "email", "department", "cargo", "shiftId", "sedeId", "isActive", "role", "companyId"];
+    const isAdmin = a.role === "admin";
+    // Un empleado sólo puede editar sus datos personales; el resto son privilegios de admin.
+    const allowed = isAdmin
+      ? ["name", "firstName", "lastName", "email", "department", "cargo", "shiftId", "sedeId", "isActive", "role", "companyId", "image"]
+      : ["name", "firstName", "lastName", "email", "image"];
+    if (!isAdmin && uid !== a.uid) return fail(res, 403, "Sólo puedes editar tu propio perfil", "PERMISSION_DENIED");
     const set = {};
-    for (const k of allowed) if (k in b) set[k] = b[k];
-    if (b.password && String(b.password).length >= 6) set.passwordHash = hashPassword(b.password);
-    const u = await Users.findByIdAndUpdate(uid, { $set: set }, { new: true });
+    for (const k of allowed) if (k in b && typeof b[k] !== "object") set[k] = b[k];
+    if (isAdmin && b.password && String(b.password).length >= 6) set.passwordHash = hashPassword(b.password);
+    if (!Object.keys(set).length) return fail(res, 400, "No hay campos editables", "INVALID_ARGUMENT");
+    const u = await Users.findOneAndUpdate({ _id: idMatch(uid) }, { $set: set }, { new: true });
     if (!u) return fail(res, 404, "Usuario no encontrado", "NOT_FOUND");
     ok(res, publicUser(u));
   },
   "DELETE /api/users/:uid": async (req, res, uid) => {
     const a = requireAdmin(req, res); if (!a) return;
-    await Users.deleteOne({ _id: uid });
+    await Users.deleteOne({ _id: idMatch(uid) });
     ok(res, true);
   },
 
   // ---- COMPANY / SHIFTS ----
   "GET /api/companies/:id": async (req, res, id) => {
     const a = requireAuth(req, res); if (!a) return;
-    const c = await Companies.findById(id).lean();
+    const c = await Companies.findOne({ _id: idMatch(id) }).lean();
     if (!c) return fail(res, 404, "Empresa no encontrada", "NOT_FOUND");
     ok(res, c);
   },
@@ -278,18 +294,31 @@ const routes = {
     const allowed = ["name", "horaEntrada", "toleranciaMin", "timezone", "geoFence", "checkInStart", "checkInEnd"];
     const set = {};
     for (const k of allowed) if (k in b) set[k] = b[k];
-    const c = await Companies.findByIdAndUpdate(id, { $set: set }, { new: true, upsert: true });
+    const c = await Companies.findOneAndUpdate({ _id: idMatch(id) }, { $set: set }, { new: true, upsert: true });
     ok(res, c);
+  },
+  "GET /api/companies/:id/shifts": async (req, res, id) => {
+    const a = requireAuth(req, res); if (!a) return;
+    const list = await Shifts.find({ companyId: id }).lean();
+    ok(res, list.map(s => ({ ...s, id: String(s._id), _id: String(s._id) })));
   },
   "PUT /api/companies/:id/shifts": async (req, res, id) => {
     const a = requireAdmin(req, res); if (!a) return;
     const { shifts } = await readBody(req);
     if (!Array.isArray(shifts)) return fail(res, 400, "shifts debe ser una lista", "INVALID_ARGUMENT");
-    await Companies.updateOne({ _id: id }, { $set: { shifts } }, { upsert: true });
+    // Normaliza ids: un turno sin id nunca debe poder asignarse a un empleado.
+    const normalized = shifts.map(s => {
+      const sid = String(s?.id || s?._id || crypto.randomUUID());
+      return {
+        ...s, id: sid, _id: sid,
+        name: s?.name || "Turno", startTime: s?.startTime || "08:00",
+        endTime: s?.endTime || "17:00", toleranceMin: Number(s?.toleranceMin ?? 15)
+      };
+    });
+    await Companies.updateOne({ _id: id }, { $set: { shifts: normalized } }, { upsert: true });
     await Shifts.deleteMany({ companyId: id });
-    const docs = shifts.map((s, i) => ({ _id: s.id || `t${i + 1}`, ...s, companyId: id }));
-    if (docs.length) await Shifts.insertMany(docs, { ordered: false }).catch(() => {});
-    ok(res, shifts);
+    if (normalized.length) await Shifts.insertMany(normalized.map(s => ({ ...s, companyId: id })), { ordered: false }).catch(() => {});
+    ok(res, normalized);
   },
 
   // ---- SEDES ----
@@ -334,15 +363,15 @@ const routes = {
     const requestId = String(b.requestId || "").trim();
     if (!requestId) return fail(res, 400, "requestId obligatorio", "INVALID_ARGUMENT");
 
-    const idem = await Idempotency.findById(requestId).lean();
+    const idem = await Idempotency.findOne({ _id: idMatch(requestId) }).lean();
     if (idem) { if (idem.uid !== a.uid) return fail(res, 403, "requestId usado por otro usuario", "PERMISSION_DENIED"); return ok(res, idem.response); }
 
     //obra target: qrToken == uid del empleado (admin escanea); si no, el propio caller
     const targetUid = String(b.qrToken || "").trim() || a.uid;
-    const caller = await Users.findById(a.uid).lean();
+    const caller = await Users.findOne({ _id: idMatch(a.uid) }).lean();
     if (!caller) return fail(res, 403, "Perfil del solicitante no existe", "PERMISSION_DENIED");
     if (targetUid === a.uid && caller.role === "admin") return fail(res, 403, "ADMIN_CANNOT_MARK_SELF", "ADMIN_CANNOT_MARK_SELF");
-    const target = targetUid === a.uid ? caller : await Users.findById(targetUid).lean();
+    const target = targetUid === a.uid ? caller : await Users.findOne({ _id: idMatch(targetUid) }).lean();
     if (!target) return fail(res, 404, "Empleado objetivo no existe", "NOT_FOUND");
     if (target.role !== "employee") return fail(res, 403, "TARGET_NOT_EMPLOYEE", "TARGET_NOT_EMPLOYEE");
     if (target.isActive === false) return fail(res, 403, "Empleado inactivo", "USER_INACTIVE");
@@ -352,11 +381,11 @@ const routes = {
     }
     const companyId = target.companyId;
     if (!companyId) return fail(res, 400, "Empleado sin empresa", "FAILED_PRECONDITION");
-    const company = await Companies.findById(companyId).lean();
+    const company = await Companies.findOne({ _id: idMatch(companyId) }).lean();
     if (!company) return fail(res, 400, "Empresa no existe", "FAILED_PRECONDITION");
 
     if (!target.sedeId) return fail(res, 400, "El empleado no tiene sede asignada", "NO_SEDE_ASSIGNED");
-    const sede = await Sedes.findById(target.sedeId).lean() || await Sedes.findOne({ id: target.sedeId, companyId }).lean();
+    const sede = await Sedes.findOne({ _id: idMatch(target.sedeId) }).lean() || await Sedes.findOne({ id: target.sedeId, companyId }).lean();
     if (!sede || sede.activa === false) return fail(res, 400, "Sede inválida o inactiva", "INVALID_SEDE_CONFIG");
     const radio = Number(sede.radioMetros);
     if (!Number.isFinite(Number(sede.lat)) || !Number.isFinite(Number(sede.lng)) || radio < 20 || radio > 500)
@@ -365,12 +394,12 @@ const routes = {
     if (distance > radio) return fail(res, 400, `OUT_OF_RANGE_GEOFENCE: Distancia ${distance.toFixed(1)}m supera el radio (${radio}m)`, "OUT_OF_RANGE_GEOFENCE");
 
     if (!target.shiftId) return fail(res, 400, "El empleado no tiene turno asignado", "NO_SHIFT_ASSIGNED");
-    const shift = await Shifts.findById(target.shiftId).lean() || (company.shifts || []).find(s => s.id === target.shiftId);
+    const shift = await Shifts.findOne({ _id: idMatch(target.shiftId) }).lean() || (company.shifts || []).find(s => s.id === target.shiftId);
     if (!shift) return fail(res, 400, "El turno asignado no existe", "NO_SHIFT_ASSIGNED");
 
     const t = serverTime(company.timezone || "America/Lima");
     const docId = `${targetUid}_${t.yyyyMmDd}`;
-    const existing = await Attendances.findById(docId).lean();
+    const existing = await Attendances.findOne({ _id: idMatch(docId) }).lean();
     let response;
 
     if (!existing) {
@@ -404,7 +433,7 @@ const routes = {
   },
   "PUT /api/attendances/:id/confirm": async (req, res, id) => {
     const a = requireAdmin(req, res); if (!a) return;
-    const att = await Attendances.findById(id);
+    const att = await Attendances.findOne({ _id: idMatch(id) });
     if (!att) return fail(res, 404, "Asistencia no encontrada", "NOT_FOUND");
     if (att.companyId !== a.companyId) return fail(res, 403, "Empresa distinta", "PERMISSION_DENIED");
     att.status = "EXITOSO"; att.confirmedBy = a.uid; att.updatedAt = new Date();

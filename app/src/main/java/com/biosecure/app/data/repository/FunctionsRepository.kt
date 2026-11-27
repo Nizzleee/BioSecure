@@ -65,10 +65,19 @@ class FunctionsRepository(context: Context) {
     private fun serverError(e: Exception): String {
         val m = e.message ?: ""
         return when {
-            m.contains("400") -> "Error: verifica ubicación, turno y horario"
-            m.contains("403") -> "Sin permisos para esta operación"
+            m.contains("ALREADY_COMPLETE") -> "Este empleado ya registró entrada y salida hoy"
+            m.contains("TOO_SOON") -> "Deben transcurrir 5 minutos desde la entrada"
+            m.contains("NO_SHIFT_ASSIGNED") -> "El empleado no tiene turno asignado"
+            m.contains("NO_SEDE_ASSIGNED") -> "El empleado no tiene sede asignada"
+            m.contains("OUT_OF_RANGE_GEOFENCE") -> "Fuera de rango: acércate a la sede"
+            m.contains("OUT_OF_WINDOW") -> "Fuera del horario permitido del turno"
+            m.contains("ACCURACY_TOO_HIGH") -> "Señal GPS imprecisa; espera mejor ubicación"
+            m.contains("ADMIN_CANNOT_MARK_SELF") -> "Un administrador no puede marcar su propia asistencia"
+            m.contains("TARGET_NOT_EMPLOYEE") -> "El QR no corresponde a un empleado"
+            m.contains("NOT_FOUND") -> "Empleado no encontrado"
             m.contains("Failed to connect") || m.contains("refused") || m.contains("timeout") ->
                 "No se pudo conectar con el servidor MongoDB"
+            m.contains("401") || m.contains("403") -> "Sin permisos para esta operación"
             else -> m.ifBlank { "Error de conexión" }
         }
     }

@@ -138,6 +138,9 @@ interface MongoApi {
     @PUT("api/companies/{id}")
     suspend fun updateCompany(@Header("Authorization") auth: String, @Path("id") id: String, @Body data: Map<String, Any?>): ApiResponse<CompanyDto>
 
+    @GET("api/companies/{id}/shifts")
+    suspend fun getShifts(@Header("Authorization") auth: String, @Path("id") id: String): ApiResponse<List<ShiftDto>>
+
     @PUT("api/companies/{id}/shifts")
     suspend fun saveShifts(@Header("Authorization") auth: String, @Path("id") id: String, @Body body: Map<String, Any>): ApiResponse<List<ShiftDto>>
 

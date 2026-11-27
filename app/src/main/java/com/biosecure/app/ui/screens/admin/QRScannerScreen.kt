@@ -7,6 +7,8 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
+import com.biosecure.app.data.location.LocationProvider
 import com.biosecure.app.ui.navigation.Screen
 import com.biosecure.app.ui.screens.scan.BioSecureBottomBar
 import com.biosecure.app.ui.viewmodel.BioSecureViewModel
@@ -49,13 +52,32 @@ fun QRScannerScreen(navController: NavController, viewModel: BioSecureViewModel?
     var statusText by remember { mutableStateOf("Apunte la cámara al código QR del empleado") }
     var isProcessing by remember { mutableStateOf(false) }
 
-    val hasCameraPermission = remember {
-        ContextCompat.checkSelfPermission(
-            context, android.Manifest.permission.CAMERA
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.CAMERA
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
     }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { hasCameraPermission = it }
 
-    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    var hasLocationPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.ACCESS_FINE_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { hasLocationPermission = it }
+
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+        if (!hasLocationPermission) locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+    }
 
     Scaffold(
         topBar = {
@@ -88,11 +110,17 @@ fun QRScannerScreen(navController: NavController, viewModel: BioSecureViewModel?
         ) {
             if (!hasCameraPermission) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "Permiso de cámara requerido",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Permiso de cámara requerido",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyLarge
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(onClick = { cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA) }) {
+                            Text("Permitir cámara")
+                        }
+                    }
                 }
                 return@Scaffold
             }
@@ -134,38 +162,25 @@ fun QRScannerScreen(navController: NavController, viewModel: BioSecureViewModel?
                                     statusText = "QR detectado, registrando..."
 
                                     scope.launch {
-                                        fusedLocationClient.lastLocation
-                                            .addOnSuccessListener { location ->
-                                                val lat = location?.latitude ?: 0.0
-                                                val lng = location?.longitude ?: 0.0
-
-                                                viewModel?.registerAttendance(scannedToken, lat, lng) { success, errorMsg ->
-                                                    if (success) {
-                                                        statusText = "Asistencia registrada ✅"
-                                                        navController.navigate(Screen.Confirmation.route) {
-                                                            popUpTo(Screen.AdminQRScan.route) { inclusive = false }
-                                                        }
-                                                    } else {
-                                                        statusText = errorMsg ?: "Error al registrar asistencia"
-                                                        isProcessing = false
-                                                        hasScanned.set(false)
-                                                    }
+                                        val loc = LocationProvider.current(context)
+                                        if (loc == null) {
+                                            statusText = "Activa la ubicación (GPS) y concede permiso para registrar"
+                                            isProcessing = false
+                                            hasScanned.set(false)
+                                            return@launch
+                                        }
+                                        viewModel?.registerAttendance(scannedToken, loc.first, loc.second) { success, errorMsg ->
+                                            if (success) {
+                                                statusText = "Asistencia registrada ✅"
+                                                navController.navigate(Screen.Confirmation.route) {
+                                                    popUpTo(Screen.AdminQRScan.route) { inclusive = false }
                                                 }
+                                            } else {
+                                                statusText = errorMsg ?: "Error al registrar asistencia"
+                                                isProcessing = false
+                                                hasScanned.set(false)
                                             }
-                                            .addOnFailureListener {
-                                                viewModel?.registerAttendance(scannedToken, 0.0, 0.0) { success, errorMsg ->
-                                                    if (success) {
-                                                        statusText = "Asistencia registrada ✅"
-                                                        navController.navigate(Screen.Confirmation.route) {
-                                                            popUpTo(Screen.AdminQRScan.route) { inclusive = false }
-                                                        }
-                                                    } else {
-                                                        statusText = errorMsg ?: "Error al registrar asistencia"
-                                                        isProcessing = false
-                                                        hasScanned.set(false)
-                                                    }
-                                                }
-                                            }
+                                        }
                                     }
                                 } catch (_: NotFoundException) {
                                     hasScanned.set(false)

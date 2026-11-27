@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavController
+import com.biosecure.app.data.location.LocationProvider
 import com.biosecure.app.ui.components.CameraPreview
 import com.biosecure.app.ui.components.LottieIcon
 import com.biosecure.app.ui.components.navigateTab
@@ -69,6 +70,19 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
         ActivityResultContracts.RequestPermission()
     ) { isGranted -> hasCameraPermission = isGranted }
 
+    var hasLocationPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val locationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted -> hasLocationPermission = isGranted }
+    LaunchedEffect(Unit) {
+        if (!hasLocationPermission) locationLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+    }
+
     var faceDetected by remember { mutableStateOf(false) }
     val scanViewModel: ScanViewModel = viewModel()
     val currentTime by scanViewModel.currentTime.collectAsState()
@@ -90,15 +104,19 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
     fun registerWithLocation(onResult: (Boolean) -> Unit) {
-        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-            val lat = location?.latitude ?: 0.0
-            val lng = location?.longitude ?: 0.0
-            pendingLat = lat
-            pendingLng = lng
-            showConfirmDialog = true
-        }.addOnFailureListener {
-            pendingLat = 0.0
-            pendingLng = 0.0
+        if (!hasLocationPermission) {
+            locationLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            scanStatus = "Activa la ubicación y concede permiso para registrar asistencia"
+            return
+        }
+        scope.launch {
+            val loc = LocationProvider.current(context)
+            if (loc == null) {
+                scanStatus = "Activa la ubicación (GPS) para registrar asistencia"
+                return@launch
+            }
+            pendingLat = loc.first
+            pendingLng = loc.second
             showConfirmDialog = true
         }
     }
