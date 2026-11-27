@@ -62,6 +62,7 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
     implementation(libs.mlkit.face.detection)
+    implementation(libs.tensorflow.lite)
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
 
     // QR

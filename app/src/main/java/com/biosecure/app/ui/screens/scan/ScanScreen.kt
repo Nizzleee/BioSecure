@@ -1,6 +1,7 @@
 package com.biosecure.app.ui.screens.scan
 
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.biometric.BiometricPrompt
@@ -31,6 +32,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavController
+import com.biosecure.app.data.biometric.FaceRecognitionManager
+import com.biosecure.app.data.biometric.FaceTemplateStore
 import com.biosecure.app.data.location.LocationProvider
 import com.biosecure.app.ui.components.CameraPreview
 import com.biosecure.app.ui.components.LottieIcon
@@ -43,7 +46,10 @@ import com.biosecure.app.ui.viewmodel.BioSecureViewModel
 import com.biosecure.app.ui.viewmodel.ScanViewModel
 import com.google.android.gms.location.LocationServices
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("MissingPermission")
@@ -84,6 +90,9 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
     }
 
     var faceDetected by remember { mutableStateOf(false) }
+    var latestFaceBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var faceEnrolled by remember { mutableStateOf(false) }
+    var faceBusy by remember { mutableStateOf(false) }
     val scanViewModel: ScanViewModel = viewModel()
     val currentTime by scanViewModel.currentTime.collectAsState()
 
@@ -96,6 +105,12 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
 
     val currentUserUid by (viewModel?.currentUserUid
         ?: kotlinx.coroutines.flow.MutableStateFlow<String?>(null)).collectAsState()
+
+    LaunchedEffect(currentUserUid) {
+        FaceRecognitionManager.initialize(context)
+        faceEnrolled = currentUserUid?.let { FaceTemplateStore.hasTemplate(it) } ?: false
+    }
+
     val currentUserName by (viewModel?.currentUserName
         ?: kotlinx.coroutines.flow.MutableStateFlow("")).collectAsState()
     val isLoading by (viewModel?.isLoading
@@ -159,7 +174,10 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
         if (selectedTab == 1 && !hasCameraPermission) {
             cameraLauncher.launch(android.Manifest.permission.CAMERA)
         }
-        if (selectedTab != 1) faceDetected = false
+        if (selectedTab != 1) {
+            faceDetected = false
+            latestFaceBitmap = null
+        }
     }
 
     // Confirmation AlertDialog
@@ -367,7 +385,10 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                     ) {
                         if (selectedTab == 1) {
                             if (hasCameraPermission) {
-                                CameraPreview(onFaceDetected = { detected -> faceDetected = detected })
+                                CameraPreview(
+                                    onFaceDetected = { detected -> faceDetected = detected },
+                                    onFaceBitmap = { bitmap -> latestFaceBitmap = bitmap }
+                                )
                             } else {
                                 LottieIcon(assetName = "face_scan.json", modifier = Modifier.size(160.dp))
                             }
@@ -399,19 +420,24 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
 
                 Spacer(modifier = Modifier.height(24.dp))
 
+                val faceStatusText = when {
+                    scanStatus.isNotEmpty() -> scanStatus
+                    selectedTab == 1 && !faceEnrolled ->
+                        if (lang == "en") "Enroll your face first" else "Inscribe tu rostro para continuar"
+                    selectedTab == 1 && !FaceRecognitionManager.isReady ->
+                        if (lang == "en") "Face model unavailable" else "Modelo facial no disponible"
+                    selectedTab == 1 && faceDetected -> if (lang == "en") "Face detected ✅" else "Rostro detectado ✅"
+                    selectedTab == 1 -> if (lang == "en") "Place your face in front of the camera" else "Coloque su rostro frente a la cámara"
+                    else -> if (lang == "en") "Authentication required" else "Reconocimiento requerido"
+                }
                 Text(
-                    text = when {
-                        selectedTab == 1 && faceDetected -> if (lang == "en") "Face detected ✅" else "Rostro detectado ✅"
-                        selectedTab == 1 -> if (lang == "en") "Place your face in front of the camera" else "Coloque su rostro frente a la cámara"
-                        scanStatus.isNotEmpty() -> scanStatus
-                        else -> if (lang == "en") "Authentication required" else "Reconocimiento requerido"
-                    },
+                    text = faceStatusText,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = when {
+                        selectedTab == 1 && (!faceEnrolled || !FaceRecognitionManager.isReady) -> MaterialTheme.colorScheme.error
                         selectedTab == 1 && faceDetected -> Color(0xFF4CAF50)
-                        selectedTab == 1 -> MaterialTheme.colorScheme.error
-                        scanStatus.contains("Error") -> MaterialTheme.colorScheme.error
+                        scanStatus.contains("Error") || scanStatus.contains("reconocido") -> MaterialTheme.colorScheme.error
                         else -> MaterialTheme.colorScheme.onBackground
                     }
                 )
@@ -426,19 +452,56 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
                 )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(24.dp))
 
                 Button(
                     onClick = {
                         if (selectedTab == 0) {
                             biometricPrompt.authenticate(promptInfo)
                         } else {
-                            if (faceDetected) {
-                                registerWithLocation {}
+                            val uid = currentUserUid
+                            if (!faceEnrolled || uid == null) {
+                                scanStatus = "Inscribe tu rostro antes de registrar la asistencia"
+                                return@Button
+                            }
+                            scope.launch {
+                                faceBusy = true
+                                scanStatus = "Verificando rostro..."
+                                val bitmap = latestFaceBitmap
+                                if (bitmap == null) {
+                                    scanStatus = "Coloque su rostro frente a la cámara"
+                                    faceBusy = false
+                                    return@launch
+                                }
+                                try {
+                                    val embedding = withContext(Dispatchers.Default) {
+                                        if (!FaceRecognitionManager.initialize(context)) {
+                                            error("Modelo facial no disponible")
+                                        }
+                                        FaceRecognitionManager.embed(bitmap)
+                                    }
+                                    val stored = FaceTemplateStore.loadTemplate(uid)
+                                    val distance = stored?.let {
+                                        FaceRecognitionManager.distance(embedding, it)
+                                    } ?: Float.MAX_VALUE
+                                    if (distance <= FaceRecognitionManager.MATCH_THRESHOLD) {
+                                        scanSuccess = true
+                                        scanStatus = "Rostro verificado ✅"
+                                        registerWithLocation {}
+                                    } else {
+                                        scanStatus = "Rostro no reconocido"
+                                    }
+                                } catch (e: Exception) {
+                                    scanStatus = "Error al verificar el rostro: ${e.message ?: "desconocido"}"
+                                } finally {
+                                    faceBusy = false
+                                }
                             }
                         }
                     },
-                    enabled = (selectedTab == 0 || faceDetected) && !isLoading,
+                    enabled = (selectedTab == 0 ||
+                        (faceDetected && faceEnrolled && FaceRecognitionManager.isReady)) &&
+                        !isLoading && !faceBusy,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp)
@@ -448,7 +511,7 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                         containerColor = MaterialTheme.colorScheme.primary
                     )
                 ) {
-                    if (isLoading) {
+                    if (isLoading || faceBusy) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
                     } else {
                         Icon(
@@ -463,6 +526,80 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
+                    }
+                }
+
+                if (selectedTab == 1) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    if (!faceEnrolled) {
+                        Button(
+                            onClick = {
+                                val uid = currentUserUid
+                                if (uid == null) {
+                                    scanStatus = "Inicia sesión para inscribir tu rostro"
+                                    return@Button
+                                }
+                                scope.launch {
+                                    faceBusy = true
+                                    scanStatus = "Capturando rostro..."
+                                    try {
+                                        if (!withContext(Dispatchers.Default) {
+                                                FaceRecognitionManager.initialize(context)
+                                            }) {
+                                            error("Modelo facial no disponible")
+                                        }
+                                        val samples = mutableListOf<FloatArray>()
+                                        repeat(3) {
+                                            delay(450)
+                                            val bitmap = latestFaceBitmap
+                                            if (bitmap == null || !faceDetected) {
+                                                error("Mantén el rostro visible frente a la cámara")
+                                            }
+                                            samples += withContext(Dispatchers.Default) {
+                                                FaceRecognitionManager.embed(bitmap)
+                                            }
+                                        }
+                                        FaceTemplateStore.saveTemplate(
+                                            uid,
+                                            FaceRecognitionManager.average(samples)
+                                        )
+                                        faceEnrolled = true
+                                        scanStatus = "Rostro inscrito correctamente ✅"
+                                    } catch (e: Exception) {
+                                        scanStatus = "No se pudo inscribir: ${e.message ?: "desconocido"}"
+                                    } finally {
+                                        faceBusy = false
+                                    }
+                                }
+                            },
+                            enabled = faceDetected && !faceBusy && !isLoading && currentUserUid != null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondary,
+                                contentColor = MaterialTheme.colorScheme.onSecondary
+                            )
+                        ) {
+                            Text(
+                                text = if (lang == "en") "ENROLL FACE" else "INSCRIBIR ROSTRO",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    } else {
+                        TextButton(
+                            onClick = {
+                                currentUserUid?.let {
+                                    FaceTemplateStore.deleteTemplate(it)
+                                    faceEnrolled = false
+                                    scanStatus = "Plantilla facial eliminada. Vuelve a inscribir tu rostro."
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(text = if (lang == "en") "Re-enroll face" else "Reinscribir rostro")
+                        }
                     }
                 }
             }

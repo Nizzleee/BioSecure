@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.*
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModelProvider
+import com.biosecure.app.data.biometric.FaceTemplateStore
 import com.biosecure.app.data.repository.AttendanceRepository
 import com.biosecure.app.data.repository.AuthRepository
 import com.biosecure.app.data.repository.FunctionsRepository
@@ -21,6 +22,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        FaceTemplateStore.init(this)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requestPermissions(

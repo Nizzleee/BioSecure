@@ -9,9 +9,9 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitInstance {
 
-    // Con el cable USB conectado: adb reverse tcp:3001 tcp:3001
-    // Para WiFi, cambiar por la IP LAN del PC, ej. http://192.168.18.5:3001/
-    private const val BASE_URL = "http://127.0.0.1:3001/"
+    // IP LAN del PC: funciona en el celular por WiFi y también en BlueStacks.
+    // Si cambias de red, actualiza esta IP por la del PC.
+    private const val BASE_URL = "http://192.168.18.5:3001/"
 
     /**
      * El backend responde errores con { ok:false, error, code } y HTTP 4xx/5xx.
