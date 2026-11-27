@@ -9,9 +9,8 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitInstance {
 
-    // Con el celular conectado por USB: adb reverse tcp:3001 tcp:3001
-    // Para WiFi, cambiar por la IP LAN del PC, ej. http://192.168.18.5:3001/
-    private const val BASE_URL = "http://127.0.0.1:3001/"
+    // La URL pública se resuelve en ApiConfig (archivo remoto + caché local).
+    // Alternativas locales: http://127.0.0.1:3001/ con adb reverse, o la IP LAN del PC.
 
     /**
      * El backend responde errores con { ok:false, error, code } y HTTP 4xx/5xx.
@@ -44,7 +43,7 @@ object RetrofitInstance {
 
     val api: ApiService by lazy {
         Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(ApiConfig.baseUrl)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
@@ -53,7 +52,7 @@ object RetrofitInstance {
 
     val mongoApi: MongoApi by lazy {
         Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(ApiConfig.baseUrl)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

@@ -8,6 +8,8 @@ import androidx.compose.runtime.*
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModelProvider
 import com.biosecure.app.data.biometric.FaceTemplateStore
+import com.biosecure.app.data.network.ApiConfig
+import kotlinx.coroutines.runBlocking
 import com.biosecure.app.data.repository.AttendanceRepository
 import com.biosecure.app.data.repository.AuthRepository
 import com.biosecure.app.data.repository.FunctionsRepository
@@ -23,6 +25,8 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         FaceTemplateStore.init(this)
+        // Resuelve la URL pública del backend antes de crear los repositorios.
+        runBlocking { ApiConfig.init(this@MainActivity) }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requestPermissions(
