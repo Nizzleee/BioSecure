@@ -15,7 +15,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
@@ -27,7 +26,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -87,17 +85,17 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { selectedSede = null; showSheet = true },
-                icon = { Icon(Icons.Default.Add, null, tint = MaterialTheme.colorScheme.onPrimary) },
+                icon = { Icon(Icons.Default.Add, null, tint = Color.White) },
                 text = {
                     Text(
                         "Nueva Sede",
-                        color = MaterialTheme.colorScheme.onPrimary,
+                        color = Color.White,
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Bold
                     )
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
+                contentColor = Color.White,
                 elevation = FloatingActionButtonDefaults.elevation(8.dp)
             )
         }
@@ -123,9 +121,6 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
                                 selectedSede = sede
                                 showSheet = true
                             },
-                            onDelete = {
-                                viewModel?.deleteSede(sede.id)
-                            },
                             onClick = {
                                 viewModel?.setSelectedSede(sede.id)
                                 navController.navigate(Screen.Dashboard.route(sede.id)) {
@@ -144,7 +139,7 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
             sede = selectedSede,
             onDismiss = { showSheet = false },
             onSave = { nombre, lat, lng, radio ->
-                viewModel?.saveSede(nombre, lat, lng, radio, selectedSede?.id ?: "")
+                viewModel?.saveSede(nombre, lat, lng, radio)
                 showSheet = false
             }
         )
@@ -152,7 +147,7 @@ fun SedesScreen(navController: NavController, viewModel: BioSecureViewModel? = n
 }
 
 @Composable
-fun SedeCard(sede: Sede, onEdit: (() -> Unit)? = null, onDelete: (() -> Unit)? = null, onClick: () -> Unit) {
+fun SedeCard(sede: Sede, onEdit: (() -> Unit)? = null, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -179,39 +174,24 @@ fun SedeCard(sede: Sede, onEdit: (() -> Unit)? = null, onDelete: (() -> Unit)? =
                         sede.nombre,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     if (sede.id.isNotEmpty()) {
                         Text(
                             "Radio: ${sede.radioMetros}m • Geofence Activo",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                if (sede.id.isNotEmpty()) {
-                    if (onEdit != null) {
-                        IconButton(onClick = onEdit) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Editar",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                    if (onDelete != null) {
-                        IconButton(onClick = onDelete) {
-                            Icon(
-                                imageVector = Icons.Default.Delete,
-                                contentDescription = "Eliminar",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
+                if (onEdit != null && sede.id.isNotEmpty()) {
+                    IconButton(onClick = onEdit) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Editar",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }
@@ -265,13 +245,8 @@ fun SedeEditorBottomSheet(
         cursorColor = MaterialTheme.colorScheme.primary
     )
 
-    val markerState = remember { MarkerState(position = location) }
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(location, 16f)
-    }
-
-    LaunchedEffect(location) {
-        if (markerState.position != location) markerState.position = location
     }
 
     LaunchedEffect(location) {
@@ -326,8 +301,10 @@ fun SedeEditorBottomSheet(
                                     isSearching = true
                                     try {
                                         val geocoder = Geocoder(context, Locale.getDefault())
+                                        val queryWithCity = if (searchQuery.contains("Arequipa", ignoreCase = true)) searchQuery else "$searchQuery, Arequipa, Peru"
                                         val addresses = withContext(Dispatchers.IO) {
-                                            geocoder.getFromLocationName(searchQuery, 1)
+                                            // Restringir búsqueda a las coordenadas de Arequipa, Perú
+                                            geocoder.getFromLocationName(queryWithCity, 1, -16.60, -71.70, -16.20, -71.30)
                                         }
                                         if (!addresses.isNullOrEmpty()) {
                                             val addr = addresses[0]
@@ -377,7 +354,7 @@ fun SedeEditorBottomSheet(
                     properties = properties
                 ) {
                     Marker(
-                        state = markerState,
+                        state = MarkerState(position = location),
                         draggable = true,
                         title = nombre.ifBlank { "Nueva Sede" }
                     )
@@ -426,14 +403,14 @@ fun SedeEditorBottomSheet(
                 enabled = nombre.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                    contentColor = Color.White
                 )
             ) {
-                Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(18.dp), tint = Color.White)
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "Guardar Configuración",
-                    color = MaterialTheme.colorScheme.onPrimary,
+                    color = Color.White,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )

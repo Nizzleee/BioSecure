@@ -24,7 +24,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -59,6 +58,7 @@ fun DashboardScreen(navController: NavController, viewModel: BioSecureViewModel?
     val dashboardState by (viewModel?.dashboardState ?: MutableStateFlow(DashboardUiState())).collectAsState()
     val firestoreEmployees by (viewModel?.firestoreEmployees ?: MutableStateFlow(emptyList<Map<String, Any>>())).collectAsState()
     val currentUserName by (viewModel?.currentUserName ?: MutableStateFlow("")).collectAsState()
+    val aiAnalysis by (viewModel?.aiAnalysis ?: MutableStateFlow(null)).collectAsState()
     val selectedSedeFromVm by (viewModel?.selectedSedeId ?: MutableStateFlow<String?>(null)).collectAsState()
     val attendanceHistory by (viewModel?.attendanceHistoryFlow ?: MutableStateFlow(emptyList())).collectAsState()
     val companyId by (viewModel?.currentCompanyId ?: MutableStateFlow("")).collectAsState()
@@ -331,6 +331,38 @@ fun DashboardScreen(navController: NavController, viewModel: BioSecureViewModel?
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             WeeklyChartCard(dashboardState.weeklyData)
+                        }
+
+                        item {
+                            Spacer(modifier = Modifier.height(20.dp))
+                            Text(
+                                text = if (lang == "en") "AI Analysis" else "Análisis IA",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                ),
+                                shape = RoundedCornerShape(16.dp),
+                                onClick = { viewModel?.getAiAnalysis() }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("✨", fontSize = 24.sp)
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        text = aiAnalysis ?: if (lang == "en") "Tap to generate an intelligent analysis for today." else "Toca para generar un análisis inteligente de hoy.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
                         }
 
                         item {
@@ -814,21 +846,17 @@ private fun ManualAttendanceDialog(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(text = "👤", fontSize = 20.sp)
-                                    Column(modifier = Modifier.weight(1f)) {
+                                    Column {
                                         Text(
                                             text = "${user.firstName} ${user.lastName}",
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
                                             text = user.email,
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
@@ -900,21 +928,8 @@ fun AuditItem(name: String, dept: String, score: String, badge: String) {
         Text(text = "👤", fontSize = 36.sp)
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = name,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = dept,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            Text(text = name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            Text(text = dept, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(text = score, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)

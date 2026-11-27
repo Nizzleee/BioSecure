@@ -18,6 +18,14 @@ class ThemePreferences(private val context: Context) {
         private val IS_DARK_MODE = booleanPreferencesKey("is_dark_mode")
         private val LANGUAGE = stringPreferencesKey("language")
         private val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
+        private val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
+    }
+
+    val geminiApiKey: Flow<String> = context.dataStore.data
+        .map { preferences -> preferences[GEMINI_API_KEY] ?: "" }
+
+    suspend fun setGeminiApiKey(key: String) {
+        context.dataStore.edit { preferences -> preferences[GEMINI_API_KEY] = key }
     }
 
     val isDarkMode: Flow<Boolean?> = context.dataStore.data

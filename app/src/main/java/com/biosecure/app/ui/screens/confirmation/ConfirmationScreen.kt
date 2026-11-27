@@ -18,12 +18,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.draw.clip
 import androidx.navigation.NavController
 import com.biosecure.app.data.model.ConfirmationData
 import com.biosecure.app.ui.components.LottieIcon
@@ -33,7 +31,6 @@ import com.biosecure.app.ui.theme.LocalAppLanguage
 import com.biosecure.app.ui.viewmodel.BioSecureViewModel
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
-import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
@@ -49,7 +46,7 @@ fun ConfirmationScreen(
         ?: MutableStateFlow<ConfirmationData?>(null)).collectAsState()
     val vmUid by (viewModel?.currentUserUid
         ?: MutableStateFlow<String?>(null)).collectAsState()
-    val currentUserUid = vmUid ?: remember { FirebaseAuth.getInstance().currentUser?.uid }
+    val currentUserUid = vmUid
     val currentUserName by (viewModel?.currentUserName
         ?: MutableStateFlow("")).collectAsState()
 
@@ -121,21 +118,14 @@ private fun AdminConfirmedContent(
 ) {
     val userName = lastConfirmation?.userName ?: "Empleado"
     val checkIn = lastConfirmation?.checkIn ?: "--:--"
-    val checkOut = lastConfirmation?.checkOut
     val date = lastConfirmation?.date ?: ""
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .safeDrawingPadding(),
-        contentAlignment = Alignment.Center
-    ) {
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .fillMaxSize()
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
         LottieIcon(
             assetName = "success_check.json",
@@ -143,17 +133,10 @@ private fun AdminConfirmedContent(
             iterations = 1
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        StatusChip(
-            text = "Registro verificado",
-            color = SuccessGreen
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = if (!checkOut.isNullOrBlank()) "Salida registrada exitosamente" else "Asistencia registrada exitosamente",
+            text = "Asistencia registrada exitosamente",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = SuccessGreen,
@@ -175,13 +158,6 @@ private fun AdminConfirmedContent(
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                 )
                 ConfirmationRow(label = "Hora de ingreso", value = checkIn)
-                if (!checkOut.isNullOrBlank()) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 12.dp),
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-                    )
-                    ConfirmationRow(label = "Hora de salida", value = checkOut)
-                }
                 if (date.isNotEmpty()) {
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 12.dp),
@@ -206,9 +182,8 @@ private fun AdminConfirmedContent(
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
-            Text(text = "VOLVER AL PANEL", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.SemiBold)
+            Text(text = "VOLVER AL PANEL", color = White, fontWeight = FontWeight.SemiBold)
         }
-    }
     }
 }
 
@@ -225,20 +200,11 @@ private fun EmployeeQRWaitingContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .safeDrawingPadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp)
             .padding(vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (!isFallido) {
-            StatusChip(
-                text = if (lang == "en") "Pending validation" else "Pendiente de validación",
-                color = WarnOrange
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
         if (currentUserName.isNotEmpty()) {
             Text(
                 text = "${if (lang == "en") "Hello" else "Hola"}, $currentUserName",
@@ -324,7 +290,7 @@ private fun EmployeeQRWaitingContent(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = lastConfirmation.checkOut ?: lastConfirmation.checkIn,
+                                text = lastConfirmation.checkIn,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = ErrorRed
@@ -370,12 +336,12 @@ private fun EmployeeQRWaitingContent(
                         }
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = if (!lastConfirmation.checkOut.isNullOrBlank()) "Salida" else if (lang == "en") "Check-in" else "Hora",
+                                text = if (lang == "en") "Check-in" else "Hora",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = lastConfirmation.checkOut ?: lastConfirmation.checkIn,
+                                text = lastConfirmation.checkIn,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary
@@ -431,33 +397,6 @@ private fun QRCardContent(qrBitmap: Bitmap?, userName: String) {
             Box(modifier = Modifier.size(240.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
-        }
-    }
-}
-
-@Composable
-private fun StatusChip(text: String, color: Color) {
-    Surface(
-        color = color.copy(alpha = 0.16f),
-        shape = RoundedCornerShape(50)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(color)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
         }
     }
 }

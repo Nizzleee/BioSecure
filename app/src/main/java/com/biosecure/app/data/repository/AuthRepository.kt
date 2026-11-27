@@ -1,167 +1,134 @@
 package com.biosecure.app.data.repository
 
-import com.google.firebase.auth.EmailAuthProvider
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.FirebaseUser
-import com.google.firebase.auth.GoogleAuthProvider
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Source
-import kotlinx.coroutines.tasks.await
+import android.content.Context
+import com.biosecure.app.data.network.ApiUser
+import com.biosecure.app.data.network.LoginRequest
+import com.biosecure.app.data.network.RetrofitInstance
+import com.biosecure.app.data.prefs.SessionStore
+
+/** Usuario de la app (antes FirebaseUser). Ahora viene de MongoDB. */
+data class AuthUser(
+    val uid: String,
+    val email: String? = null,
+    val role: String = "employee",
+    val name: String = ""
+)
 
 data class UserLoginResult(
-    val user: FirebaseUser,
+    val user: AuthUser,
     val role: String,
     val name: String,
     val companyId: String = "",
     val image: String = ""
 )
 
-class AuthRepository {
-    private val auth = FirebaseAuth.getInstance()
-    private val db = FirebaseFirestore.getInstance()
+class AuthRepository(context: Context) {
+    private val session = SessionStore(context)
+    private val api = RetrofitInstance.mongoApi
 
-    val currentUser: FirebaseUser? get() = auth.currentUser
+    val currentUser: AuthUser?
+        get() = session.uid?.let { AuthUser(it, session.email, session.role, session.name) }
 
     suspend fun loginWithRole(email: String, password: String): Result<UserLoginResult> {
         return try {
-            val trimmedEmail = email.trim()
-            val authResult = auth.signInWithEmailAndPassword(trimmedEmail, password.trim()).await()
-            val user = authResult.user!!
-            val tokenTask = user.getIdToken(true).await()
-            var role = tokenTask.claims["role"] as? String
-            var companyId = tokenTask.claims["companyId"] as? String
-
-            val doc = db.collection("users").document(user.uid).get(Source.SERVER).await()
-            if (doc.exists()) {
-                role = doc.getString("role") ?: role
-                companyId = doc.getString("companyId") ?: companyId ?: "BioSecure"
-                val name = doc.getString("name") ?: user.displayName ?: trimmedEmail
-                val image = doc.getString("image") ?: ""
-                if (role != null) {
-                    return Result.success(UserLoginResult(user, role, name, companyId!!, image))
-                }
-            }
-            auth.signOut()
-            Result.failure(Exception("Usuario sin rol asignado en el sistema"))
+            val resp = api.login(LoginRequest(email.trim(), password.trim()))
+            val data = resp.data ?: return Result.failure(Exception(resp.error ?: "Error de autenticación"))
+            if (!resp.ok) return Result.failure(Exception(resp.error ?: "Error de autenticación"))
+            session.token = data.token
+            session.uid = data.user.uid
+            session.email = data.user.email
+            session.role = data.user.role
+            session.companyId = data.user.companyId
+            session.name = data.user.name
+            Result.success(data.user.toLoginResult())
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(friendlyError(e)))
         }
     }
 
-    suspend fun loginWithGoogle(idToken: String, photoUrl: String?, displayName: String?, email: String?): Result<UserLoginResult> {
+    suspend fun loginWithGoogle(idToken: String): Result<UserLoginResult> {
         return try {
-            val credential = GoogleAuthProvider.getCredential(idToken, null)
-            val authResult = auth.signInWithCredential(credential).await()
-            val user = authResult.user!!
-
-            val doc = db.collection("users").document(user.uid).get(Source.SERVER).await()
-            if (doc.exists()) {
-                val role = doc.getString("role")
-                val companyId = doc.getString("companyId") ?: "BioSecure"
-                val name = doc.getString("name") ?: displayName ?: user.email ?: "Usuario"
-                val image = doc.getString("image") ?: photoUrl ?: ""
-                // Update photo if Google has one and stored one is empty
-                if (image.isEmpty() && !photoUrl.isNullOrEmpty()) {
-                    db.collection("users").document(user.uid).update("image", photoUrl).await()
-                }
-                val finalImage = if (image.isNotEmpty()) image else (photoUrl ?: "")
-                if (role != null) {
-                    return Result.success(UserLoginResult(user, role, name, companyId, finalImage))
-                }
-            }
-
-            // First-time Google user: create as employee of default company
-            val companyId = "Pizzer" + "\u00ED" + "a"
-            val name = displayName ?: user.displayName ?: user.email ?: "Usuario"
-            val image = photoUrl ?: user.photoUrl?.toString() ?: ""
-            val userData = hashMapOf(
-                "email" to (email ?: user.email ?: ""),
-                "role" to "employee",
-                "name" to name,
-                "image" to image,
-                "companyId" to companyId
-            )
-            db.collection("users").document(user.uid).set(userData).await()
-
-            Result.success(UserLoginResult(user, "employee", name, companyId, image))
+            val resp = api.loginGoogle(mapOf("idToken" to idToken))
+            val data = resp.data ?: return Result.failure(Exception(resp.error ?: "Error con Google"))
+            if (!resp.ok) return Result.failure(Exception(resp.error ?: "Error con Google"))
+            session.token = data.token
+            session.uid = data.user.uid
+            session.email = data.user.email
+            session.role = data.user.role
+            session.companyId = data.user.companyId
+            session.name = data.user.name
+            Result.success(data.user.toLoginResult())
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(friendlyError(e)))
         }
     }
 
-    suspend fun register(email: String, password: String): Result<FirebaseUser> {
+    suspend fun register(email: String, password: String): Result<AuthUser> {
         return try {
-            val result = auth.createUserWithEmailAndPassword(email, password).await()
-            Result.success(result.user!!)
+            val resp = api.createUser(session.authHeader(), mapOf(
+                "email" to email.trim(), "password" to password,
+                "name" to email.substringBefore("@"), "role" to "employee",
+                "companyId" to session.companyId
+            ))
+            val u = resp.data ?: return Result.failure(Exception(resp.error ?: "No se pudo registrar"))
+            Result.success(AuthUser(u.uid, u.email, u.role, u.name))
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(friendlyError(e)))
         }
     }
 
-    suspend fun loginAndGetRole(email: String, password: String): Pair<FirebaseUser, String> =
+    suspend fun loginAndGetRole(email: String, password: String): Pair<AuthUser, String> =
         loginWithRole(email, password).map { Pair(it.user, it.role) }.getOrThrow()
 
-    suspend fun getRoleForCurrentUser(): String? {
-        val uid = auth.currentUser?.uid ?: return null
-        return try {
-            val doc = db.collection("users").document(uid).get().await()
-            doc.getString("role")
-        } catch (e: Exception) {
-            null
-        }
-    }
+    suspend fun getRoleForCurrentUser(): String? = session.uid?.let { session.role }
 
     suspend fun getUserData(): UserLoginResult? {
-        val user = auth.currentUser ?: return null
+        if (session.token == null) return null
         return try {
-            val doc = db.collection("users").document(user.uid).get().await()
-            val role = doc.getString("role") ?: return null
-            val name = doc.getString("name") ?: user.email ?: ""
-            val companyId = doc.getString("companyId") ?: ""
-            val image = doc.getString("image") ?: ""
-            UserLoginResult(user, role, name, companyId, image)
+            val resp = api.me(session.authHeader())
+            resp.data?.toLoginResult()
         } catch (e: Exception) { null }
     }
 
     suspend fun getCurrentUserResult(): Result<UserLoginResult> {
-        val user = auth.currentUser ?: return Result.failure(Exception("No hay sesión activa"))
+        val token = session.token ?: return Result.failure(Exception("No hay sesión activa"))
         return try {
-            val tokenTask = user.getIdToken(false).await()
-            var role = tokenTask.claims["role"] as? String
-            var companyId = tokenTask.claims["companyId"] as? String
-
-            val doc = db.collection("users").document(user.uid).get(Source.SERVER).await()
-            if (doc.exists()) {
-                role = doc.getString("role") ?: role
-                companyId = doc.getString("companyId") ?: companyId ?: "BioSecure"
-                val name = doc.getString("name") ?: user.displayName ?: user.email ?: "Usuario"
-                val image = doc.getString("image") ?: ""
-                if (role != null) {
-                    return Result.success(UserLoginResult(user, role, name, companyId!!, image))
-                }
+            val resp = api.me("Bearer $token")
+            if (!resp.ok || resp.data == null) {
+                return Result.failure(Exception(resp.error ?: "Sesión inválida"))
             }
-            Result.failure(Exception("Usuario sin datos en Firestore"))
+            val user = resp.data!!.toLoginResult()
+            session.uid = user.user.uid
+            session.role = user.role
+            session.companyId = user.companyId
+            session.name = user.name
+            Result.success(user)
         } catch (e: Exception) {
-            Result.failure(e)
+            Result.failure(Exception(friendlyError(e)))
         }
     }
 
-    fun isLoggedIn(): Boolean = auth.currentUser != null
+    fun isLoggedIn(): Boolean = !session.token.isNullOrBlank()
 
-    suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> {
-        return try {
-            val user = auth.currentUser ?: return Result.failure(Exception("No hay sesión activa"))
-            val email = user.email ?: return Result.failure(Exception("No hay correo asociado a la cuenta"))
-            // Re-autenticar con la contraseña actual
-            val credential = EmailAuthProvider.getCredential(email, currentPassword)
-            user.reauthenticate(credential).await()
-            // Cambiar contraseña
-            user.updatePassword(newPassword).await()
-            Result.success(Unit)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    fun logout() {
+        session.clear()
     }
 
-    fun logout() { auth.signOut() }
+    private fun ApiUser.toLoginResult() = UserLoginResult(
+        user = AuthUser(uid, email, role, name),
+        role = role,
+        name = name.ifBlank { email },
+        companyId = companyId,
+        image = image
+    )
+
+    private fun friendlyError(e: Exception): String {
+        val m = e.message ?: ""
+        return when {
+            m.contains("Failed to connect") || m.contains("Connection refused") || m.contains("timeout") ->
+                "No se pudo conectar con el servidor MongoDB. Revisa la red o adb reverse tcp:3001."
+            m.contains("401") -> "Correo o contraseña incorrectos"
+            else -> m.ifBlank { "Error de conexión" }
+        }
+    }
 }

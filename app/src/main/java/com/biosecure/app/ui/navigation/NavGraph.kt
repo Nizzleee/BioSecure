@@ -1,6 +1,5 @@
 package com.biosecure.app.ui.navigation
 
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -33,7 +32,6 @@ import com.biosecure.app.ui.screens.confirmation.ConfirmationScreen
 import com.biosecure.app.ui.screens.dashboard.DashboardScreen
 import com.biosecure.app.ui.screens.employee.EmployeeDashboard
 import com.biosecure.app.ui.screens.employee.QRScreen
-import com.biosecure.app.ui.screens.enroll.FaceEnrollScreen
 import com.biosecure.app.ui.screens.history.HistoryScreen
 import com.biosecure.app.ui.screens.login.LoginScreen
 import com.biosecure.app.ui.screens.scan.ScanScreen
@@ -51,6 +49,7 @@ sealed class Screen(val route: String) {
     object Dashboard : Screen("admin/dashboard/{sedeId}") {
         fun route(sedeId: String?) = "admin/dashboard/${sedeId ?: "null"}"
     }
+    object AdminScan : Screen("admin/scan")
     object AdminHistory : Screen("admin/history")
     object AdminSettings : Screen("admin/settings")
     object AdminRegisterEmployee : Screen("admin/register-employee")
@@ -74,10 +73,9 @@ sealed class Screen(val route: String) {
     object EmployeeHistory : Screen("employee/history")
     object EmployeeSettings : Screen("employee/settings")
     object EmployeeQR : Screen("employee/qr")
-    object EmployeeEnroll : Screen("employee/enroll")
 
     companion object {
-        fun scan(isAdmin: Boolean) = EmployeeScan.route
+        fun scan(isAdmin: Boolean) = if (isAdmin) AdminScan.route else EmployeeScan.route
         fun history(isAdmin: Boolean) = if (isAdmin) AdminHistory.route else EmployeeHistory.route
         fun settings(isAdmin: Boolean) = if (isAdmin) AdminSettings.route else EmployeeSettings.route
     }
@@ -119,10 +117,10 @@ fun NavGraph(
     viewModel: BioSecureViewModel? = null,
     authRepository: AuthRepository? = null
 ) {
-    val enter = fadeIn(animationSpec = tween(200))
-    val exit = fadeOut(animationSpec = tween(200))
-    val popEnter = fadeIn(animationSpec = tween(200))
-    val popExit = fadeOut(animationSpec = tween(200))
+    val enter = fadeIn() + slideInHorizontally(initialOffsetX = { it / 4 })
+    val exit = fadeOut() + slideOutHorizontally(targetOffsetX = { -it / 4 })
+    val popEnter = fadeIn() + slideInHorizontally(initialOffsetX = { -it / 4 })
+    val popExit = fadeOut() + slideOutHorizontally(targetOffsetX = { it / 4 })
 
     CompositionLocalProvider(LocalAppLanguage provides language) {
     NavHost(
@@ -167,6 +165,11 @@ fun NavGraph(
             }
         }
 
+        composable(Screen.AdminScan.route) {
+            AdminRouteGuard(viewModel = viewModel, navController = navController) {
+                ScanScreen(navController = navController, isAdmin = true, viewModel = viewModel)
+            }
+        }
         composable(Screen.AdminHistory.route) {
             AdminRouteGuard(viewModel = viewModel, navController = navController) {
                 HistoryScreen(navController = navController, isAdmin = true, viewModel = viewModel)
@@ -227,9 +230,7 @@ fun NavGraph(
             arguments = listOf(navArgument("uid") { type = NavType.StringType })
         ) { backStackEntry ->
             val uid = backStackEntry.arguments?.getString("uid") ?: ""
-            AdminRouteGuard(viewModel = viewModel, navController = navController) {
-                AdminEmployeeQRScreen(navController = navController, uid = uid)
-            }
+            AdminEmployeeQRScreen(navController = navController, uid = uid)
         }
         composable(Screen.AdminShiftSettings.route) {
             AdminRouteGuard(viewModel = viewModel, navController = navController) {
@@ -260,9 +261,6 @@ fun NavGraph(
         }
         composable(Screen.EmployeeScan.route) {
             ScanScreen(navController = navController, isAdmin = false, viewModel = viewModel)
-        }
-        composable(Screen.EmployeeEnroll.route) {
-            FaceEnrollScreen(navController = navController, viewModel = viewModel)
         }
         composable(Screen.EmployeeHistory.route) {
             HistoryScreen(navController = navController, isAdmin = false, viewModel = viewModel)

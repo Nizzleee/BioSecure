@@ -9,17 +9,13 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModelProvider
 import com.biosecure.app.data.repository.AttendanceRepository
 import com.biosecure.app.data.repository.AuthRepository
-import com.biosecure.app.data.repository.FaceRecognitionRepository
-import com.biosecure.app.data.repository.FirebaseFunctionsRepository
+import com.biosecure.app.data.repository.FunctionsRepository
 import com.biosecure.app.data.prefs.ThemePreferences
 import androidx.compose.foundation.isSystemInDarkTheme
 import com.biosecure.app.ui.navigation.NavGraph
 import com.biosecure.app.ui.theme.BioSecureTheme
 import com.biosecure.app.ui.viewmodel.BioSecureViewModel
 import com.biosecure.app.ui.viewmodel.BioSecureViewModelFactory
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.messaging.FirebaseMessaging
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,28 +39,12 @@ class MainActivity : FragmentActivity() {
             )
         }
 
-        val authRepository = AuthRepository()
-        val attendanceRepository = AttendanceRepository()
-        val functionsRepository = FirebaseFunctionsRepository()
-        val faceRecognitionRepository = FaceRecognitionRepository(applicationContext)
+        val authRepository = AuthRepository(this)
+        val attendanceRepository = AttendanceRepository(this)
+        val functionsRepository = FunctionsRepository(this)
         val themePreferences = ThemePreferences(this)
-        val factory = BioSecureViewModelFactory(
-            authRepository,
-            attendanceRepository,
-            functionsRepository,
-            faceRecognitionRepository,
-            themePreferences
-        )
+        val factory = BioSecureViewModelFactory(authRepository, attendanceRepository, functionsRepository, themePreferences)
         val viewModel = ViewModelProvider(this, factory)[BioSecureViewModel::class.java]
-
-        FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
-            FirebaseAuth.getInstance().currentUser?.uid?.let { uid ->
-                FirebaseFirestore.getInstance()
-                    .collection("users")
-                    .document(uid)
-                    .update("fcmToken", token)
-            }
-        }
 
         setContent {
             val isDarkPref by viewModel.isDarkMode.collectAsState()

@@ -21,12 +21,8 @@ import com.biosecure.app.data.model.Shift
 import com.biosecure.app.ui.navigation.Screen
 import com.biosecure.app.ui.theme.*
 import com.biosecure.app.ui.viewmodel.BioSecureViewModel
-import com.google.firebase.FirebaseApp
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,8 +59,7 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
 
     val isFormValid = firstName.isNotBlank() && lastName.isNotBlank() &&
             email.isNotBlank() && password.length >= 6 &&
-            cargo.isNotBlank() && departamento.isNotBlank() &&
-            selectedSedeId.isNotBlank() && selectedShiftId.isNotBlank()
+            cargo.isNotBlank() && departamento.isNotBlank()
 
     val fieldShape = RoundedCornerShape(12.dp)
     val fieldColors = OutlinedTextFieldDefaults.colors(
@@ -248,7 +243,7 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
                                     Column {
                                         Text(sede.nombre, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                                         Text(
-                                            sede.nombre,
+                                            "Arequipa, Peru",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -366,44 +361,17 @@ fun RegisterEmployeeScreen(navController: NavController, viewModel: BioSecureVie
                         isLoading = true
                         errorMsg = null
                         try {
-                            val mainApp = FirebaseApp.getInstance()
-                            val secondaryApp = try {
-                                FirebaseApp.getInstance("secondary")
-                            } catch (e: IllegalStateException) {
-                                FirebaseApp.initializeApp(
-                                    context.applicationContext,
-                                    mainApp.options,
-                                    "secondary"
-                                )!!
-                            }
-                            val secondaryAuth = FirebaseAuth.getInstance(secondaryApp)
-                            secondaryAuth.createUserWithEmailAndPassword(
-                                email.trim(), password
-                            ).await()
-                            val uid = secondaryAuth.currentUser?.uid
-                                ?: throw Exception("No se pudo obtener UID del empleado")
-                            secondaryAuth.signOut()
+                            val repo = viewModel?.functionsRepository
+                                ?: throw Exception("No hay conexión con el servidor")
+                            val uid = repo.createEmployee(
+                                email = email, password = password,
+                                firstName = firstName, lastName = lastName,
+                                department = departamento, cargo = cargo,
+                                companyId = companyId,
+                                sedeId = selectedSedeId, shiftId = selectedShiftId
+                            ).getOrThrow()
 
-                            val cid = companyId
-                            val userData = hashMapOf(
-                                "email" to email.trim(),
-                                "role" to "employee",
-                                "name" to "${firstName.trim()} ${lastName.trim()}",
-                                "department" to departamento.trim(),
-                                "cargo" to cargo.trim(),
-                                "companyId" to cid
-                            )
-                            if (selectedSedeId.isNotEmpty()) {
-                                userData["sedeId"] = selectedSedeId
-                            }
-                            if (selectedShiftId.isNotEmpty()) {
-                                userData["shiftId"] = selectedShiftId
-                                userData["shiftName"] = selectedShiftName
-                            }
-                            FirebaseFirestore.getInstance()
-                                .collection("users").document(uid).set(userData).await()
-
-                            navController.navigate(Screen.AdminEmployeeList.route(null)) {
+                            navController.navigate(Screen.AdminEmployeeQR.route(uid)) {
                                 popUpTo(Screen.AdminRegisterEmployee.route) { inclusive = true }
                             }
                         } catch (e: Exception) {

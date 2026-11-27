@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">BioSecure</string>
+    <!-- OAuth Client ID (tipo Web) de Google Cloud Console. Reemplazar con el real. -->
+    <string name="google_web_client_id">103319710145-f2dd8416d5j060uue01mquo09n5n1pt8.apps.googleusercontent.com</string>
 </resources>

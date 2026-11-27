@@ -17,10 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,7 +26,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -44,12 +40,9 @@ import com.biosecure.app.ui.screens.scan.BioSecureBottomBar
 import com.biosecure.app.ui.theme.*
 import com.biosecure.app.ui.theme.LocalAppLanguage
 import com.biosecure.app.ui.viewmodel.BioSecureViewModel
-import com.google.firebase.auth.FirebaseAuth
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
 
 @Composable
 fun HistoryScreen(navController: NavController, isAdmin: Boolean = false, viewModel: BioSecureViewModel? = null) {
@@ -57,7 +50,7 @@ fun HistoryScreen(navController: NavController, isAdmin: Boolean = false, viewMo
     val attendanceHistory by (viewModel?.attendanceHistoryFlow ?: MutableStateFlow(emptyList())).collectAsState()
     val isLoading by (viewModel?.isLoading ?: MutableStateFlow(false)).collectAsState()
     val vmUid by (viewModel?.currentUserUid ?: MutableStateFlow<String?>(null)).collectAsState()
-    val currentUserUid = vmUid ?: remember { FirebaseAuth.getInstance().currentUser?.uid }
+    val currentUserUid = vmUid
     val sedes by (viewModel?.sedes ?: MutableStateFlow(emptyList<com.biosecure.app.data.model.Sede>())).collectAsState()
 
     val lang = LocalAppLanguage.current
@@ -66,8 +59,6 @@ fun HistoryScreen(navController: NavController, isAdmin: Boolean = false, viewMo
     var statusFilter by remember { mutableStateOf("ALL") }
     var sedeFilter by remember { mutableStateOf<String?>(null) }
     var showFilters by remember { mutableStateOf(false) }
-    var isRefreshing by remember { mutableStateOf(false) }
-    val refreshScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         viewModel?.observeAttendanceHistory()
@@ -97,8 +88,8 @@ fun HistoryScreen(navController: NavController, isAdmin: Boolean = false, viewMo
         modifier = Modifier
             .fillMaxSize()
             .swipeToNavigate(
-                onSwipeRight = { navController.navigateTab(Screen.settings(isAdmin)) },
-                onSwipeLeft = {
+                onSwipeLeft = { navController.navigateTab(Screen.settings(isAdmin)) },
+                onSwipeRight = {
                     if (!isAdmin) navController.navigateTab(Screen.EmployeeScan.route)
                     else navController.navigateTab(Screen.AdminSedes.route)
                 }
@@ -115,25 +106,12 @@ fun HistoryScreen(navController: NavController, isAdmin: Boolean = false, viewMo
             },
             containerColor = MaterialTheme.colorScheme.background
         ) { padding ->
-            PullToRefreshBox(
-                isRefreshing = isRefreshing,
-                onRefresh = {
-                    isRefreshing = true
-                    viewModel?.observeAttendanceHistory()
-                    refreshScope.launch {
-                        kotlinx.coroutines.delay(1500)
-                        isRefreshing = false
-                    }
-                },
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
+                    .padding(horizontal = 20.dp)
             ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 20.dp)
-                ) {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -149,21 +127,6 @@ fun HistoryScreen(navController: NavController, isAdmin: Boolean = false, viewMo
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Text(text = "🔍", fontSize = 24.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        IconButton(onClick = {
-                            isRefreshing = true
-                            viewModel?.observeAttendanceHistory()
-                            refreshScope.launch {
-                                kotlinx.coroutines.delay(1500)
-                                isRefreshing = false
-                            }
-                        }) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.Refresh,
-                                contentDescription = if (lang == "en") "Refresh" else "Actualizar",
-                                tint = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -433,7 +396,6 @@ fun HistoryScreen(navController: NavController, isAdmin: Boolean = false, viewMo
                     }
                 }
             }
-            }
         }
     }
 }
@@ -523,16 +485,12 @@ fun AttendanceCard(record: Attendance, isAdmin: Boolean = false, uid: String? = 
                             text = record.userName,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "${record.checkIn} • ${record.location}",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             text = record.date,
