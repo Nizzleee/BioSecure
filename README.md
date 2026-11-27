@@ -2,7 +2,7 @@
 
 > **Estado del Proyecto:** Beta 03 | **Compilación:** `assembleDebug` BUILD SUCCESSFUL  
 > **Plataforma:** Android Nativo (Kotlin + Jetpack Compose Material 3)  
-> **Backend:** Firebase Auth + Cloud Firestore + Cloud Messaging
+> **Backend:** Node.js propio + MongoDB Atlas (sin Firebase)
 
 ---
 
@@ -13,7 +13,7 @@
 4. [Cosas de las que CARECE (Pendientes y Limitaciones)](#4-cosas-de-las-que-carece-pendientes-y-limitaciones)
 5. [Vulnerabilidades y Riesgos de Seguridad](#5-vulnerabilidades-y-riesgos-de-seguridad)
 6. [Arquitectura y Stack Tecnológico](#6-arquitectura-y-stack-tecnológico)
-7. [Base de Datos Firestore](#7-base-de-datos-firestore)
+7. [Base de Datos MongoDB Atlas](#7-base-de-datos-mongodb-atlas)
 8. [Estructura del Proyecto](#8-estructura-del-proyecto)
 9. [Instalación y Configuración](#9-instalación-y-configuración)
 10. [Equipo de Desarrollo](#10-equipo-de-desarrollo)
@@ -36,8 +36,8 @@ Diseñado bajo un modelo **SaaS Multi-tenant**, permite a múltiples empresas ge
 Actualmente el proyecto se encuentra en la versión **Beta 03**, completamente funcional y estable para pruebas operativas en dispositivos Android físicos.
 
 * **Estado de Compilación:** 100% libre de errores de compilación (`./gradlew assembleDebug` ejecutable).
-* **Base de Datos:** Integración completa con Firebase Cloud Firestore en tiempo real.
-* **Procesamiento On-Device:** Detección de rostro procesada localmente mediante la NPU/CPU del dispositivo con Google ML Kit sin latencia de red.
+* **Base de Datos:** MongoDB Atlas, accedida únicamente desde el backend Node propio (auth scrypt + tokens HMAC).
+* **Procesamiento On-Device:** ML Kit localiza el rostro y MobileFaceNet TFLite genera el embedding; la plantilla se cifra en Android Keystore.
 * **Multi-tenant:** Aislamiento lógico de datos por empresa (`companyId`) activo en todas las colecciones.
 
 ---
@@ -48,7 +48,7 @@ Actualmente el proyecto se encuentra en la versión **Beta 03**, completamente f
 * **Autenticación y Sesión Persistente:** Detección automática de rol (`admin`) al iniciar sesión o reabrir la aplicación.
 * **Dashboard con Métricas en Tiempo Real:** Visualización de total de empleados, asistencias del día, tardanzas, accesos rápidos y animaciones Lottie.
 * **Escáner de Validación QR:** Integración de CameraX + ZXing para leer el QR del empleado y cambiar el estado de la asistencia de `PENDIENTE` a `EXITOSO` de forma instantánea.
-* **Gestión de Empleados (CRUD):** Registro de nuevos empleados usando una app secundaria de Firebase Auth (evita cerrar la sesión activa del admin), edición de datos y eliminación con diálogo de confirmación.
+* **Gestión de Empleados (CRUD):** Registro de empleados en MongoDB mediante el backend, edición de datos y eliminación con diálogo de confirmación.
 * **Gestión de Turnos Personalizados:** Creación, edición y eliminación de turnos horarios por empresa con configuración de hora de entrada, hora de salida y margen de tolerancia (`ShiftSettingsScreen`).
 * **Asignador de Turnos:** Interfaz interactiva (`ShiftManagerScreen`) para asignar o desasignar turnos a empleados específicos.
 * **Gestión de Sedes y Geocercas (Google Maps):** Configuración visual de sedes en mapa interactivo con búsqueda de direcciones por Geocoder y ajuste de radio de geocerca (20m a 500m).
@@ -61,14 +61,14 @@ Actualmente el proyecto se encuentra en la versión **Beta 03**, completamente f
   * **Tab Reconocimiento Facial:** Inscripción de plantilla facial (3 muestras), comparación por distancia euclidiana y almacenamiento cifrado en Android Keystore. ML Kit localiza el rostro y MobileFaceNet TFLite genera el embedding; la asistencia solo se registra si el rostro coincide con la plantilla del usuario.
 * **Panel del Empleado (`EmployeeDashboard`):** Muestra el estado actual de la asistencia del día (⏳ Pendiente / ✅ Exitoso / ⏱️ Tardanza / ⚠️ Sin registro).
 * **Carnet QR Personal:** Visualización del código QR en alta definición para ser escaneado por el administrador.
-* **Historial Personal:** Consulta de registros históricos propios filtrados por su UID de Firebase.
+* **Historial Personal:** Consulta de registros históricos propios filtrados por su UID local.
 * **Edición de Perfil:** Permite actualizar el nombre visible del usuario.
 
 ### 🌐 Funcionalidades Globales
 * **Soporte Bilingüe (Español / Inglés):** Cambio dinámico de idioma en toda la interfaz mediante `CompositionLocal`.
 * **Soporte para Modo Oscuro / Claro:** Paleta de colores adaptativa en Material 3 con tokens globales en `Theme.kt`.
 * **Animaciones Lottie:** 8 animaciones dinámicas reales integradas en assets para mejorar la experiencia de usuario.
-* **Notificaciones Push:** Integración con Firebase Cloud Messaging (`BioSecureMessagingService`).
+* **Notificaciones:** Consulta REST al backend (polling cada 4 s); no depende de Firebase Cloud Messaging.
 
 ---
 
@@ -79,8 +79,8 @@ Actualmente el proyecto se encuentra en la versión **Beta 03**, completamente f
 | **Build de Producción** | No cuenta con Keystore de firma de release ni reglas de optimización / ofuscación ProGuard / R8 en `build.gradle.kts`. | Imposibilita la publicación directa en Google Play Store en su estado actual. |
 | **Pruebas Automatizadas** | Falta de suite de pruebas unitarias (`BioSecureViewModelTest`), pruebas de interfaz (Compose UI Tests) e integración. | Riesgo de regresiones al agregar nuevas funcionalidades. |
 | **Detección de Vida Facial (Liveness Detection)** | ML Kit detecta contornos y presencia de rostro, pero **no valida parpadeo ni movimiento dinámico**. | Posibilidad de suplantación mediante fotos impresas o pantallas de alta resolución. |
-| **Validación Servidor de Geocerca** | La geocerca se visualiza en Google Maps, pero **no se bloquea la marcación a nivel de regla de seguridad en Firestore** si el GPS es alterado. | Un usuario con conocimientos técnicos podría falsear sus coordenadas GPS. |
-| **Sincronización Offline Completa** | Aunque Firestore tiene caché local, la lógica de validación de turnos requiere conexión activa para sincronizar la confirmación del admin. | Dificultad para operar en zonas sin ninguna conectividad a internet. |
+| **Validación Servidor de Geocerca** | La geocerca se visualiza en Google Maps y el backend recalcula la distancia, pero un GPS simulado con `accuracy` baja aún podría falsear la ubicación. | Un usuario con conocimientos técnicos podría falsear sus coordenadas GPS. |
+| **Sincronización Offline Completa** | La app usa REST contra el backend; sin conectividad no se puede validar turnos ni registrar asistencia. | Dificultad para operar en zonas sin ninguna conectividad a internet. |
 | **Filtro Sede-First en Admin** | El administrador ve el total global de la empresa, pero no puede filtrar todo el Dashboard dinámicamente por una Sede específica seleccionada en un desplegable. | Menor practicidad para administradores con decenas de sedes simultáneas. |
 
 ---
@@ -93,17 +93,12 @@ Actualmente el proyecto se encuentra en la versión **Beta 03**, completamente f
 ### 🔴 1. Código QR Estático (Riesgo de Reutilización / Replay Attack)
 * **Vulnerabilidad:** El código QR generado para el empleado contiene únicamente el `uid` en texto plano sin firmar.
 * **Riesgo:** Un empleado podría tomar una captura de pantalla a su QR y enviársela a un compañero para que este lo muestre al administrador, marcando asistencia sin estar físicamente en el lugar si el supervisor no verifica el rostro del portador.
-* **Solución Recomendada:** Implementar QRs efímeros con expiración (ej. TOTP o Tokens JWT firmados que duren 30 segundos) generados en conjunto con Firebase Functions.
+* **Solución Recomendada:** Implementar QRs efímeros con expiración (ej. TOTP o Tokens JWT firmados que duren 30 segundos) generados en el backend Node propio.
 
-### 🔴 2. Reglas de Seguridad Permisivas en Firestore
-* **Vulnerabilidad:** Las reglas actuales de Firestore permiten lectura y escritura a cualquier usuario autenticado:
-  ```groovy
-  match /{document=**} {
-    allow read, write: if request.auth != null;
-  }
-  ```
-* **Riesgo:** Un empleado autenticado con herramientas de desarrollo podría modificar directamente registros de asistencia de otros usuarios o cambiar su propio rol a `admin` en la base de datos.
-* **Solución Recomendada:** Restringir escritura de asistencias a campos específicos y asegurar que solo documentos con `role == 'admin'` puedan modificar registros de terceros o actualizar usuarios.
+### 🔴 2. Secreto de firma de sesión por defecto
+* **Vulnerabilidad:** `JWT_SECRET` tiene un valor por defecto en `server.js` si no se define `AUTH_SECRET` en el entorno.
+* **Riesgo:** Cualquiera que conozca ese valor podría firmar tokens falsos y suplantar a un administrador.
+* **Solución Recomendada:** Definir `AUTH_SECRET` con un valor aleatorio largo en el servidor antes de publicarlo. El backend ya valida roles, empresa (`companyId`) y expiración de tokens.
 
 ### 🟡 3. Clave API de Google Maps Expuesta en `AndroidManifest.xml`
 * **Vulnerabilidad:** La API Key de Google Maps está escrita en texto plano dentro del manifiesto de la aplicación.
@@ -137,7 +132,11 @@ Actualmente el proyecto se encuentra en la versión **Beta 03**, completamente f
           └────────────────────────────┼────────────────────────────┘
                                        │
                          ┌─────────────▼─────────────┐
-                         │ Firebase Cloud Firestore  │
+                         │  Backend Node (REST/HTTP) │
+                          └────────────┬──────────────┘
+                                       │
+                          ┌────────────▼──────────────┐
+                          │      MongoDB Atlas        │
                          └───────────────────────────┘
 ```
 
@@ -148,7 +147,8 @@ Actualmente el proyecto se encuentra en la versión **Beta 03**, completamente f
 * **Gestión de Estado:** `StateFlow` + `viewModelScope`
 * **Inyección de Dependencias:** `BioSecureViewModelFactory` manual
 * **Librerías Clave:**
-  * Firebase (Auth, Firestore, Messaging) BOM `33.1.0`
+  * Retrofit + OkHttp (REST al backend Node)
+  * TensorFlow Lite `2.17.0` (MobileFaceNet) + ML Kit Face Detection `16.1.7`
   * CameraX `1.3.1`
   * Google ML Kit Face Detection `16.1.7`
   * AndroidX Biometric `1.2.0-alpha05`
@@ -158,7 +158,7 @@ Actualmente el proyecto se encuentra en la versión **Beta 03**, completamente f
 
 ---
 
-## 7. Base de Datos Firestore
+## 7. Base de Datos MongoDB Atlas
 
 ### Colecciones Principales:
 * **`users/{uid}`**: Perfil del usuario, rol (`admin` / `employee`), empresa asignada (`companyId`), turno (`shiftId`), sede (`sedeId`) y token FCM.
@@ -173,7 +173,7 @@ Actualmente el proyecto se encuentra en la versión **Beta 03**, completamente f
 ```
 com.biosecure.app/
 ├── MainActivity.kt                      # FragmentActivity para soporte de BiometricPrompt
-├── BioSecureMessagingService.kt        # Servicio de Notificaciones Push FCM
+├── data/network/ApiConfig.kt           # URL pública del backend
 ├── data/
 │   ├── model/                          # Data Classes (User, Attendance, Shift, Sede, Company)
 │   ├── prefs/                          # Jetpack DataStore para preferencias de tema
@@ -197,12 +197,18 @@ com.biosecure.app/
 
 ### Pasos para Ejecutar:
 1. Clonar el repositorio.
-2. Solicitar y colocar el archivo `google-services.json` dentro de la carpeta `app/`.
+2. Arrancar el backend: `server\start.cmd` (o `server\start-public.cmd` para exponerlo con Cloudflare Tunnel).
 3. Sincronizar Gradle en Android Studio.
 4. Compilar e instalar en el dispositivo físico mediante:
    ```bash
    ./gradlew assembleDebug
    ```
+
+### Red / URL del backend
+* La app resuelve la URL pública desde `api-url.txt` del repositorio (raw de GitHub), con caché local y valor por defecto.
+* Si el túnel se reinicia y cambia la URL, actualiza `api-url.txt` y haz push: la app la recoge al abrir, sin recompilar.
+* Para pruebas locales por USB: `adb reverse tcp:3001 tcp:3001` y `http://127.0.0.1:3001/` en `ApiConfig.DEFAULT_BASE_URL`.
+* Para WiFi local: usa la IP LAN del PC, por ejemplo `http://192.168.18.5:3001/`.
 
 ---
 
@@ -213,5 +219,5 @@ com.biosecure.app/
 | **Nicolas Carrillo Chambi** | Líder Técnico & Arquitectura | TECSUP |
 | **Sergio Ponce Moron** | UI/UX Developer & Jetpack Compose | TECSUP |
 | **Marco Figueroa Cordova** | Integración Biométrica & ML Kit | TECSUP |
-| **Carlos Moran Guillen** | Backend & Firebase Firestore | TECSUP |
+| **Carlos Moran Guillen** | Backend Node & MongoDB Atlas | TECSUP |
 | **Adrian Flores Cama** | ViewModel & Navigation Compose | TECSUP |
