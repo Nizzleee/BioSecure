@@ -1,28 +1,28 @@
 package com.biosecure.app.data.biometric
 
 import android.content.Context
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import android.util.Base64
 import android.util.Log
+import com.biosecure.app.data.prefs.SessionStore
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.security.KeyStore
-import java.security.SecureRandom
+import java.security.MessageDigest
 import javax.crypto.Cipher
-import javax.crypto.KeyGenerator
-import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 
 /**
- * Almacena la plantilla facial cifrada con una clave de Android Keystore.
- * Nunca guarda la imagen del rostro ni la plantilla en texto plano.
+ * Almacena la plantilla facial cifrada con AES-256-GCM.
+ *
+ * La clave local se deriva del token de sesión y del uid. No se usa Android
+ * Keystore porque en algunos Huawei invalida la clave al reinstalar la APK o
+ * al cambiar la biometría del sistema, lo que obligaba a reinscribir el rostro.
+ * En MongoDB se guarda una copia cifrada aparte con una clave del servidor.
+ * La imagen del rostro nunca se guarda ni se envía.
  */
 object FaceTemplateStore {
     private const val TAG = "BioSecureTemplate"
-    private const val KEY_ALIAS = "biosecure_face_template_key"
     private const val PREF_NAME = "biosecure_face_templates"
-    private const val ANDROID_KEYSTORE = "AndroidKeyStore"
     private const val IV_SIZE_BYTES = 12
     private const val TAG_LENGTH_BITS = 128
 
@@ -39,33 +39,21 @@ object FaceTemplateStore {
     fun localUpdatedAt(uid: String): Long =
         prefs(requireContext()).getLong(updatedKey(uid), 0L)
 
-    private fun getOrCreateKey(): SecretKey {
-        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-        (keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.secretKey?.let { return it }
-
-        val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-        keyGenerator.init(
-            KeyGenParameterSpec.Builder(
-                KEY_ALIAS,
-                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-            )
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
-                .build()
-        )
-        return keyGenerator.generateKey()
+    /** Clave AES-256 derivada del token de sesión; cambia al volver a iniciar sesión. */
+    private fun keyFor(uid: String): SecretKeySpec {
+        val token = SessionStore(requireContext()).token
+            ?: error("No hay sesión activa para cifrar la plantilla")
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest("BioSecure|$uid|$token".toByteArray(Charsets.UTF_8))
+        return SecretKeySpec(digest, "AES")
     }
 
-    private fun cipher(mode: Int, iv: ByteArray? = null): Cipher {
-        val transformation = "${KeyProperties.KEY_ALGORITHM_AES}/" +
-            "${KeyProperties.BLOCK_MODE_GCM}/" +
-            KeyProperties.ENCRYPTION_PADDING_NONE
-        return Cipher.getInstance(transformation).apply {
+    private fun cipher(mode: Int, uid: String, iv: ByteArray? = null): Cipher {
+        return Cipher.getInstance("AES/GCM/NoPadding").apply {
             if (mode == Cipher.ENCRYPT_MODE) {
-                init(Cipher.ENCRYPT_MODE, getOrCreateKey())
+                init(Cipher.ENCRYPT_MODE, keyFor(uid))
             } else {
-                init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(TAG_LENGTH_BITS, iv))
+                init(Cipher.DECRYPT_MODE, keyFor(uid), GCMParameterSpec(TAG_LENGTH_BITS, iv))
             }
         }
     }
@@ -89,8 +77,11 @@ object FaceTemplateStore {
         val plain = ByteArray(embedding.size * 4)
         ByteBuffer.wrap(plain).order(ByteOrder.nativeOrder()).asFloatBuffer().put(embedding)
 
-        val iv = ByteArray(IV_SIZE_BYTES).also { SecureRandom().nextBytes(it) }
-        val encrypted = cipher(Cipher.ENCRYPT_MODE).doFinal(plain)
+        // Importante: la IV debe ser la que generó el propio Cipher.
+        // Si se antepone otra IV distinta, el MAC falla al descifrar.
+        val encryptor = cipher(Cipher.ENCRYPT_MODE, uid)
+        val encrypted = encryptor.doFinal(plain)
+        val iv = encryptor.iv
         val payload = iv + encrypted
 
         prefs(requireContext()).edit()
@@ -137,7 +128,7 @@ object FaceTemplateStore {
             if (payload.size <= IV_SIZE_BYTES) return null
             val iv = payload.copyOfRange(0, IV_SIZE_BYTES)
             val encrypted = payload.copyOfRange(IV_SIZE_BYTES, payload.size)
-            val plain = cipher(Cipher.DECRYPT_MODE, iv).doFinal(encrypted)
+            val plain = cipher(Cipher.DECRYPT_MODE, uid, iv).doFinal(encrypted)
 
             val floats = FloatArray(plain.size / 4)
             ByteBuffer.wrap(plain).order(ByteOrder.nativeOrder()).asFloatBuffer().get(floats)
@@ -145,8 +136,8 @@ object FaceTemplateStore {
             floats
         } catch (e: Exception) {
             Log.e(TAG, "loadTemplate FALLÓ uid=$uid: ${e.javaClass.simpleName}: ${e.message}", e)
-            // La clave del Keystore pudo cambiar (p. ej. al reinstalar la APK).
-            // Se elimina la copia local para que el repositorio la recupere de Mongo.
+            // La copia local ya no se puede descifrar (p. ej. cambió el token).
+            // Se elimina para que el repositorio la recupere del respaldo en Mongo.
             prefs(requireContext()).edit()
                 .remove(prefKey(uid))
                 .remove(updatedKey(uid))

@@ -1,6 +1,7 @@
 package com.biosecure.app.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.biosecure.app.data.biometric.FaceTemplateStore
 import com.biosecure.app.data.network.RetrofitInstance
 import com.biosecure.app.data.prefs.SessionStore
@@ -10,10 +11,10 @@ import kotlinx.coroutines.withContext
 /**
  * Sincroniza la plantilla facial con el backend propio.
  *
- * La copia local sigue cifrada con Android Keystore. En MongoDB se guarda
- * cifrada con AES-256-GCM usando una clave del servidor. Así, si el celular
- * cambia la clave del Keystore o se reinstala la app, la plantilla se recupera
- * automáticamente al iniciar sesión y no se vuelve a pedir la inscripción.
+ * La copia local sigue cifrada (AES-256-GCM con clave derivada del token).
+ * En MongoDB se guarda cifrada con AES-256-GCM usando una clave del servidor.
+ * Así, si el celular cambia la clave o se reinstala la app, la plantilla se
+ * recupera automáticamente al iniciar sesión y no se vuelve a pedir la inscripción.
  */
 class FaceTemplateRepository(context: Context) {
     private val session = SessionStore(context)
@@ -62,6 +63,7 @@ class FaceTemplateRepository(context: Context) {
         try {
             val remote = api.getFaceTemplate(session.authHeader()).data
             val local = FaceTemplateStore.loadTemplate(uid)
+            Log.d("BioSecureTemplate", "sync uid=$uid remote=${remote?.template?.length ?: 0} local=${local?.size ?: 0} remoteAt=${remote?.updatedAt ?: 0} localAt=${FaceTemplateStore.localUpdatedAt(uid)}")
             if (remote?.template != null) {
                 // Gana la copia más reciente: si la local se inscribió después
                 // de la subida (o la subida falló), no se pisa con la vieja.
@@ -74,7 +76,8 @@ class FaceTemplateRepository(context: Context) {
                 upload(uid, local)
             }
             FaceTemplateStore.hasTemplate(uid)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e("BioSecureTemplate", "sync FALLÓ uid=$uid: ${e.javaClass.simpleName}: ${e.message}", e)
             FaceTemplateStore.hasTemplate(uid)
         }
     }
