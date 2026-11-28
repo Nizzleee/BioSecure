@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit
  */
 object ApiConfig {
 
-    const val DEFAULT_BASE_URL = "https://fioricet-heard-techrepublic-globe.trycloudflare.com/"
+    const val DEFAULT_BASE_URL = "https://lancaster-preservation-strings-actually.trycloudflare.com/"
 
     private const val CONFIG_API =
         "https://api.github.com/repos/Nizzleee/BioSecure/contents/api-url.txt?ref=merge/beta03-app"

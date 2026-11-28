@@ -37,6 +37,7 @@ import androidx.navigation.NavController
 import com.biosecure.app.data.biometric.FaceRecognitionManager
 import com.biosecure.app.data.biometric.FaceTemplateStore
 import com.biosecure.app.data.location.LocationProvider
+import com.biosecure.app.data.repository.FaceTemplateRepository
 import com.biosecure.app.ui.components.CameraPreview
 import com.biosecure.app.ui.components.LottieIcon
 import com.biosecure.app.ui.components.navigateTab
@@ -64,6 +65,7 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
     val context = LocalContext.current
     val executor = remember { ContextCompat.getMainExecutor(context) }
     val scope = rememberCoroutineScope()
+    val faceTemplateRepository = remember { FaceTemplateRepository(context) }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -112,7 +114,14 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
 
     LaunchedEffect(currentUserUid) {
         FaceRecognitionManager.initialize(context)
-        faceEnrolled = currentUserUid?.let { FaceTemplateStore.hasTemplate(it) } ?: false
+        val uid = currentUserUid
+        faceEnrolled = if (uid == null) {
+            false
+        } else {
+            // Descarga el respaldo cifrado de Mongo si existe; si no, sube la
+            // copia local. Así el botón no reaparece al reinstalar la app.
+            faceTemplateRepository.sync(uid)
+        }
     }
 
     val currentUserName by (viewModel?.currentUserName
@@ -489,10 +498,10 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                                         }
                                         FaceRecognitionManager.embed(bitmap)
                                     }
-                                    val stored = FaceTemplateStore.loadTemplate(uid)
+                                    val stored = faceTemplateRepository.loadOrRestore(uid)
                                     if (stored == null) {
                                         faceEnrolled = false
-                                        scanStatus = "Plantilla facial inválida. Vuelve a inscribir tu rostro."
+                                        scanStatus = "No hay plantilla facial. Inscribe tu rostro para continuar."
                                         return@launch
                                     }
                                     val distance = FaceRecognitionManager.distance(embedding, stored)
@@ -571,12 +580,15 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                                                 FaceRecognitionManager.embed(bitmap)
                                             }
                                         }
-                                        FaceTemplateStore.saveTemplate(
-                                            uid,
-                                            FaceRecognitionManager.average(samples)
-                                        )
+                                        val average = FaceRecognitionManager.average(samples)
+                                        FaceTemplateStore.saveTemplate(uid, average)
+                                        val backedUp = faceTemplateRepository.upload(uid, average)
                                         faceEnrolled = true
-                                        scanStatus = "Rostro inscrito correctamente ✅"
+                                        scanStatus = if (backedUp) {
+                                            "Rostro inscrito y respaldado ✅"
+                                        } else {
+                                            "Rostro inscrito localmente ✅ (sin respaldo)"
+                                        }
                                     } catch (e: Exception) {
                                         scanStatus = "No se pudo inscribir: ${e.message ?: "desconocido"}"
                                     } finally {
@@ -606,6 +618,7 @@ fun ScanScreen(navController: NavController, isAdmin: Boolean = false, viewModel
                                     FaceTemplateStore.deleteTemplate(it)
                                     faceEnrolled = false
                                     scanStatus = "Plantilla facial eliminada. Vuelve a inscribir tu rostro."
+                                    scope.launch { faceTemplateRepository.deleteRemote() }
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()

@@ -39,6 +39,14 @@ object FaceRecognitionManager {
                     buffer.put(bytes)
                     buffer.rewind()
                     interpreter = Interpreter(buffer)
+                    val inputTensor = interpreter!!.getInputTensor(0)
+                    val outputTensor = interpreter!!.getOutputTensor(0)
+                    Log.d(
+                        TAG,
+                        "Modelo cargado: in=${inputTensor.shape().contentToString()} " +
+                            "(${inputTensor.numBytes()} bytes) out=${outputTensor.shape().contentToString()} " +
+                            "(${outputTensor.numBytes()} bytes)"
+                    )
                     true
                 } catch (e: Exception) {
                     Log.e(TAG, "No se pudo cargar el modelo facial", e)
@@ -89,6 +97,7 @@ object FaceRecognitionManager {
             outputBuffer.rewind()
             for (i in output.indices) output[i] = outputBuffer.getFloat()
         }
+        Log.d(TAG, "embed: ${output.size} floats")
         return output
     }
 

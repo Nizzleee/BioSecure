@@ -37,6 +37,12 @@ data class ApiUser(
 data class LoginRequest(val email: String, val password: String)
 data class LoginData(val token: String, val user: ApiUser)
 
+/** Plantilla facial (192 floats en Base64). El backend la guarda cifrada. */
+data class FaceTemplateDto(
+    val template: String? = null,
+    val updatedAt: Long = 0
+)
+
 data class AttendanceDto(
     val id: String? = null,
     val _id: String? = null,
@@ -121,6 +127,18 @@ interface MongoApi {
 
     @GET("api/auth/me")
     suspend fun me(@Header("Authorization") auth: String): ApiResponse<ApiUser>
+
+    @GET("api/me/face-template")
+    suspend fun getFaceTemplate(@Header("Authorization") auth: String): ApiResponse<FaceTemplateDto>
+
+    @PUT("api/me/face-template")
+    suspend fun saveFaceTemplate(
+        @Header("Authorization") auth: String,
+        @Body body: Map<String, String>
+    ): ApiResponse<Boolean>
+
+    @DELETE("api/me/face-template")
+    suspend fun deleteFaceTemplate(@Header("Authorization") auth: String): ApiResponse<Boolean>
 
     @GET("api/users")
     suspend fun getUsers(@Header("Authorization") auth: String, @Query("companyId") companyId: String? = null, @Query("role") role: String? = null): ApiResponse<List<ApiUser>>
