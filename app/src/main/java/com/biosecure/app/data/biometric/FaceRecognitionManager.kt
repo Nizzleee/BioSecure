@@ -70,7 +70,24 @@ object FaceRecognitionManager {
 
         val output = FloatArray(EMBEDDING_SIZE)
         synchronized(lock) {
-            model.run(input, output)
+            val inputTensor = model.getInputTensor(0)
+            val outputTensor = model.getOutputTensor(0)
+            require(inputTensor.numBytes() == input.size * 4) {
+                "Formato de entrada inválido (${inputTensor.numBytes()} bytes)"
+            }
+            require(outputTensor.numBytes() == output.size * 4) {
+                "Formato de salida inválido (${outputTensor.numBytes()} bytes)"
+            }
+
+            // Buffers directos: evita el error "Target Tensor hasn't been allocated"
+            // que algunos dispositivos lanzan al usar arrays primitivos.
+            val inputBuffer = ByteBuffer.allocateDirect(input.size * 4).order(ByteOrder.nativeOrder())
+            input.forEach { inputBuffer.putFloat(it) }
+            inputBuffer.rewind()
+            val outputBuffer = ByteBuffer.allocateDirect(output.size * 4).order(ByteOrder.nativeOrder())
+            model.run(inputBuffer, outputBuffer)
+            outputBuffer.rewind()
+            for (i in output.indices) output[i] = outputBuffer.getFloat()
         }
         return output
     }
